@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+
+# 本地开发产物
+demo_out/
+dist/
+.venv*/
+venv/
+
+# 编辑器
+.idea/
+.vscode/

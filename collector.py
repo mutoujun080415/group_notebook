@@ -1,0 +1,278 @@
+"""聊天记录采集、抽样与统计。
+
+只在这里依赖 Neo-MoFox 的消息 API，且采用函数内延迟导入，
+使得统计相关的纯函数可以被离线脚本与单元测试直接复用。
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime, time as dt_time, timedelta, tzinfo
+from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from .models import (
+    NotebookStats,
+    clean_text,
+    count_emoji,
+    count_visible_chars,
+)
+
+_QUOTE_MIN_CHARS = 10
+_QUOTE_MAX_CHARS = 90
+_SKIP_TEXTS = {"[图片]", "[表情]", "[语音]", "[视频]", "[文件]", "[转发消息]", "。"}
+
+
+def resolve_timezone(name: str) -> ZoneInfo | tzinfo:
+    """解析时区名称，缺少时区数据时退回固定 UTC+8。"""
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        from datetime import timezone
+
+        return timezone(timedelta(hours=8), name="Asia/Shanghai")
+
+
+def day_bounds(day: str, timezone_name: str) -> tuple[float, float]:
+    """返回指定自然日的起止时间戳（左闭右开）。"""
+    tz = resolve_timezone(timezone_name)
+    current = date.fromisoformat(day)
+    start = datetime.combine(current, dt_time.min, tzinfo=tz)
+    end = start + timedelta(days=1)
+    return start.timestamp(), end.timestamp()
+
+
+def today_in_timezone(timezone_name: str) -> str:
+    """返回指定时区下的今天日期字符串。"""
+    tz = resolve_timezone(timezone_name)
+    return datetime.now(tz).date().isoformat()
+
+
+def sample_messages(messages: list[dict[str, Any]], cap: int) -> list[dict[str, Any]]:
+    """在保持时间顺序的前提下，把消息均匀抽样到 ``cap`` 条以内。"""
+    if cap <= 0 or len(messages) <= cap:
+        return list(messages)
+    step = len(messages) / float(cap)
+    picked = [messages[min(len(messages) - 1, int(index * step))] for index in range(cap)]
+    result: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for item in picked:
+        key = id(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
+async def fetch_day_messages(
+    stream_id: str,
+    day: str,
+    timezone_name: str,
+    *,
+    include_bot: bool = True,
+    max_messages: int = 0,
+) -> list[dict[str, Any]]:
+    """读取指定聊天流某一天的全部消息。"""
+    from src.app.plugin_system.api import message_api
+
+    start_ts, end_ts = day_bounds(day, timezone_name)
+    messages = await message_api.get_messages_by_time_in_chat(
+        stream_id=stream_id,
+        start_time=start_ts,
+        end_time=end_ts,
+        limit=max(int(max_messages), 0),
+        limit_mode="latest" if max_messages else "earliest",
+        filter_bot=False,
+        filter_command=False,
+    )
+    if not include_bot:
+        messages = await message_api.filter_bot_messages(messages)
+    return [item for item in messages if float(item.get("time") or 0) > 0]
+
+
+async def split_bot_messages(
+    messages: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """区分机器人消息与真人消息。"""
+    from src.app.plugin_system.api import message_api
+
+    try:
+        human = await message_api.filter_bot_messages(messages)
+    except Exception:
+        return list(messages), []
+
+    # filter_bot_messages 返回的是原字典的浅拷贝列表，元素仍是同一批对象；
+    # 用对象身份区分，避免 message_id 缺失时按字符串比较误判。
+    human_ids = {id(item) for item in human}
+    bots = [item for item in messages if id(item) not in human_ids]
+    if not human and messages:
+        return list(messages), []
+    return human, bots
+
+
+def local_hour(timestamp: float, timezone_name: str) -> int:
+    """把时间戳转换为指定时区的小时（0-23）。"""
+    tz = resolve_timezone(timezone_name)
+    return datetime.fromtimestamp(timestamp, tz).hour
+
+
+def compute_stats(
+    messages: list[dict[str, Any]],
+    *,
+    day: str,
+    timezone_name: str,
+    bot_messages: list[dict[str, Any]] | None = None,
+) -> NotebookStats:
+    """根据消息列表计算摘录所需的统计指标。"""
+    stats = NotebookStats(date=day)
+    hourly = [0] * 24
+    member_counter: dict[str, int] = {}
+    member_names: dict[str, str] = {}
+    total_chars = 0
+    longest_text = ""
+    longest_name = ""
+
+    for message in messages:
+        timestamp = float(message.get("time") or 0)
+        hour = local_hour(timestamp, timezone_name) if timestamp else 0
+        hourly[hour] += 1
+
+        name = clean_text(message.get("sender_name") or message.get("sender_id") or "未知", 24)
+        sender = str(message.get("sender_id") or name)
+        member_counter[sender] = member_counter.get(sender, 0) + 1
+        member_names[sender] = name
+
+        text = clean_text(message.get("processed_plain_text") or "", 0)
+        chars = count_visible_chars(text)
+        total_chars += chars
+        stats.emoji_count += count_emoji(text)
+        if chars > len(longest_text):
+            longest_text = text
+            longest_name = name
+
+    stats.message_count = len(messages)
+    stats.member_count = len(member_counter)
+    stats.char_count = total_chars
+    stats.hourly = hourly
+    stats.avg_chars = round(total_chars / len(messages), 1) if messages else 0.0
+    stats.top_members = [
+        {"name": member_names[sender], "count": count}
+        for sender, count in sorted(member_counter.items(), key=lambda item: item[1], reverse=True)[:12]
+    ]
+    if any(hourly):
+        peak = max(range(24), key=lambda index: hourly[index])
+        stats.peak_hour = peak
+        stats.peak_count = hourly[peak]
+    if longest_text:
+        stats.longest = {"name": longest_name, "text": clean_text(longest_text, 120)}
+    if bot_messages:
+        stats.bot_message_count = len(bot_messages)
+        stats.bot_char_count = sum(
+            count_visible_chars(clean_text(item.get("processed_plain_text") or "", 0))
+            for item in bot_messages
+        )
+    return stats
+
+
+def build_transcript(
+    messages: list[dict[str, Any]],
+    *,
+    timezone_name: str,
+    per_message_limit: int = 160,
+    budget: int = 24000,
+) -> str:
+    """把消息列表拼成带时间戳的聊天记录文本。
+
+    从最新的消息开始向前填充，保证预算内保留最靠近日报时间的内容。
+    """
+    tz = resolve_timezone(timezone_name)
+    lines: list[str] = []
+    used = 0
+    for message in reversed(messages):
+        text = clean_text(message.get("processed_plain_text") or "", per_message_limit)
+        if not text:
+            continue
+        stamp = datetime.fromtimestamp(float(message.get("time") or 0), tz).strftime("%H:%M")
+        name = clean_text(message.get("sender_name") or "未知", 24)
+        line = f"{stamp} {name}: {text}"
+        if used + len(line) + 1 > budget:
+            break
+        lines.append(line)
+        used += len(line) + 1
+    lines.reverse()
+    return "\n".join(lines)
+
+
+def pick_quote_candidates(
+    messages: list[dict[str, Any]],
+    *,
+    limit: int = 12,
+) -> list[dict[str, str]]:
+    """挑选适合抄在页角的金句候选消息。
+
+    规则偏保守：过滤命令、链接、纯表情与过短文本，并按长度与话题感打分。
+    """
+    scored: list[tuple[float, dict[str, str]]] = []
+    seen: set[str] = set()
+    for message in messages:
+        raw = clean_text(message.get("processed_plain_text") or "", 0)
+        if not raw or raw in _SKIP_TEXTS:
+            continue
+        if raw.startswith(("/", "!", "！", "#")) or "http://" in raw or "https://" in raw:
+            continue
+        if raw.startswith("[CQ:"):
+            continue
+        length = count_visible_chars(raw)
+        if length < _QUOTE_MIN_CHARS or length > _QUOTE_MAX_CHARS:
+            continue
+        if raw in seen:
+            continue
+        seen.add(raw)
+        score = float(length)
+        if any(mark in raw for mark in ("？", "?", "！", "!", "…")):
+            score += 6
+        if "\n" in raw:
+            score += 3
+        scored.append(
+            (
+                score,
+                {
+                    "name": clean_text(message.get("sender_name") or "未知", 24),
+                    "text": clean_text(raw, _QUOTE_MAX_CHARS),
+                },
+            )
+        )
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    picked: list[dict[str, str]] = []
+    used_names: set[str] = set()
+    for _, item in scored:
+        if item["name"] in used_names and len(picked) < limit // 2:
+            continue
+        used_names.add(item["name"])
+        picked.append(item)
+        if len(picked) >= limit:
+            break
+    return picked
+
+
+def split_day_periods(messages: list[dict[str, Any]], timezone_name: str) -> list[dict[str, Any]]:
+    """按凌晨/上午/下午/晚上把消息切成四段，供无模型回退使用。"""
+    buckets: list[list[dict[str, Any]]] = [[], [], [], []]
+    labels = ["凌晨的纸页", "上午的纸页", "下午的纸页", "晚上的纸页"]
+    for message in messages:
+        hour = local_hour(float(message.get("time") or 0), timezone_name)
+        if hour < 6:
+            index = 0
+        elif hour < 12:
+            index = 1
+        elif hour < 18:
+            index = 2
+        else:
+            index = 3
+        buckets[index].append(message)
+    return [
+        {"label": labels[index], "messages": items}
+        for index, items in enumerate(buckets)
+        if items
+    ]

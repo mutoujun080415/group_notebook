@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>{{ page_title }}</title>
+{{ fonts_css | safe }}
+<style>
+  :root {
+    --bg-paper: #fdfbf7;
+    --ink: #5d4037;
+    --ink-2: #8d6e63;
+    --ink-3: #a1887f;
+    --ink-faint: #bcaaa4;
+    --yellow: #fff9c4;
+    --pink: #ffccbc;
+    --blue: #b3e5fc;
+    --green: #c8e6c9;
+    --purple: #e1bee7;
+    --accent: #ff7043;
+    --mbti-bg: #ede7f6;
+    --mbti-border: #9575cd;
+    --mbti-text: #512da8;
+    --title-bg: #fffde7;
+    --title-border: #ffb74d;
+    --title-text: #bf360c;
+    --font-title: 'ZCOOL KuaiLe', 'LXGW WenKai', 'KaiTi', 'Microsoft YaHei', sans-serif;
+    --font-hand: 'LXGW WenKai', 'KaiTi', 'Microsoft YaHei', serif;
+    --font-body: 'Microsoft YaHei', 'LXGW WenKai', 'PingFang SC', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  .topic-detail, .u-reason, .dim-comment, .note-text, .q-text, .speech-bubble p, .coffee-text, .murmur-text {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  body {
+    width: 800px;
+    background: var(--bg-paper);
+    background-image: radial-gradient(#ddd 1.6px, transparent 1.6px);
+    background-size: 24px 24px;
+    color: var(--ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  .container {
+    position: relative;
+    margin: 22px;
+    padding: 30px 28px;
+    background: #fffdf8;
+    border-radius: 6px;
+    box-shadow: 8px 8px 0 var(--blue), 16px 16px 0 var(--pink), 0 20px 40px rgba(0,0,0,.08);
+  }
+  .container::before {
+    content: '';
+    position: absolute;
+    inset: 12px;
+    border: 2px dashed #d7ccc8;
+    border-radius: 4px;
+    pointer-events: none;
+  }
+
+  /* ---------- 胶带 ---------- */
+  .tape, .card-tape, .small-tape, .mood-card-tape {
+    position: absolute;
+    background: rgba(255, 213, 79, .55);
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .tape { width: 96px; height: 18px; top: -10px; left: 34px; transform: rotate(-4deg); }
+  .tape-blue { background: rgba(129, 212, 250, .5); transform: rotate(3deg); left: auto; right: 30px; }
+  .card-tape { width: 86px; height: 16px; top: -9px; left: 50%; transform: translateX(-50%) rotate(-2deg); }
+  .user-card:nth-child(even) .card-tape { background: rgba(129, 199, 192, .5); transform: translateX(-50%) rotate(2.5deg); }
+  .user-card:nth-child(3n) .card-tape { background: rgba(149, 117, 205, .4); }
+  .small-tape { width: 46px; height: 12px; top: -7px; right: 14px; transform: rotate(3deg); }
+  .mood-card-tape { width: 110px; height: 18px; top: -10px; left: 50%; transform: translateX(-50%) rotate(-1.5deg); background: rgba(129, 212, 250, .45); }
+
+  /* ---------- 页眉 ---------- */
+  .header { position: relative; }
+  .brand-row { display: flex; justify-content: space-between; align-items: center; }
+  .brand { font-size: 11px; letter-spacing: 3px; color: var(--ink-3); font-weight: 700; }
+  .room { font-size: 11.5px; color: var(--ink-3); }
+  .header-main { display: flex; gap: 18px; margin-top: 16px; align-items: flex-start; }
+  .header-left { flex: 1 1 auto; }
+  .header-right { flex: 0 0 auto; text-align: right; }
+  .title-sticker {
+    position: relative;
+    display: inline-block;
+    background: var(--title-bg);
+    border: 3px dashed var(--title-border);
+    border-radius: 8px;
+    padding: 20px 26px 18px;
+    transform: rotate(-1.5deg);
+    box-shadow: 6px 6px 0 var(--blue);
+  }
+  .title-sticker h1 {
+    margin: 0;
+    font-family: var(--font-title);
+    font-size: 38px;
+    line-height: 1.25;
+    color: var(--title-text);
+  }
+  .stamp-note {
+    display: inline-block;
+    margin-top: 14px;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    background: #fff;
+    font-family: var(--font-hand);
+    font-size: 13.5px;
+    padding: 4px 12px;
+    border-radius: 6px;
+    transform: rotate(1.5deg);
+  }
+  .greeting {
+    margin: 16px 0 0;
+    font-family: var(--font-hand);
+    font-size: 15.5px;
+    line-height: 1.7;
+    color: var(--ink-2);
+  }
+  .character { margin-bottom: 8px; }
+  .character img { max-height: 215px; max-width: 200px; object-fit: contain; }
+  .date-badge {
+    display: inline-block;
+    background: var(--yellow);
+    border: 1px solid #e6d980;
+    box-shadow: 3px 3px 0 rgba(0,0,0,.06);
+    padding: 8px 14px;
+    transform: rotate(2deg);
+    font-family: var(--font-hand);
+    font-size: 13.5px;
+    color: #6d4c41;
+  }
+
+  /* ---------- 统计邮票卡 ---------- */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-top: 30px;
+  }
+  .stat-stamp {
+    position: relative;
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 12px;
+    padding: 16px 8px 13px;
+    text-align: center;
+  }
+  .stat-stamp::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border: 1.5px dotted var(--ink-faint);
+    border-radius: 8px;
+    pointer-events: none;
+  }
+  .stat-num { font-family: var(--font-title); font-size: 29px; line-height: 1.1; color: var(--ink); }
+  .stat-label { margin-top: 6px; font-size: 11.5px; color: var(--ink-2); }
+
+  /* ---------- 小节头 ---------- */
+  .section { margin-top: 36px; }
+  .section-head { display: flex; align-items: baseline; gap: 10px; }
+  .section-tag {
+    background: var(--ink);
+    color: var(--title-bg);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 3px 9px;
+    border-radius: 4px;
+    transform: rotate(-1.5deg);
+  }
+  .section-head h2 { margin: 0; font-family: var(--font-title); font-size: 24px; color: #4e342e; }
+  .section-note { margin-left: auto; font-size: 12px; color: var(--ink-3); }
+
+  /* ---------- 24H 活跃 ---------- */
+  .chart-card {
+    position: relative;
+    margin-top: 14px;
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    padding: 20px 18px 12px 44px;
+  }
+  .coil {
+    position: absolute;
+    left: 13px; top: 14px; bottom: 14px;
+    width: 14px;
+    background-image: radial-gradient(circle at 7px 7px, #efebe9 3.2px, transparent 3.8px);
+    background-size: 14px 16px;
+  }
+  .chart {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    gap: 4px;
+    align-items: end;
+    height: 200px;
+  }
+  .bar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .bar-count { min-height: 13px; font-size: 9.5px; color: var(--ink-2); margin-bottom: 2px; }
+  .crayon-bar { width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px; background: var(--blue); }
+  .bar-col:nth-child(even) .crayon-bar { background: var(--green); }
+  .crayon-bar.peak { background: var(--accent) !important; }
+  .chart-axis {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    gap: 4px;
+    margin-top: 7px;
+  }
+  .chart-axis span { text-align: center; font-size: 8.5px; color: var(--ink-faint); }
+
+  /* ---------- 话题：横线信纸 ---------- */
+  .lined-paper {
+    position: relative;
+    margin-top: 14px;
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    padding: 20px 22px 14px 50px;
+    background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 27px, #ece2cf 27px, #ece2cf 28px);
+  }
+  .paper-holes {
+    position: absolute;
+    left: 15px; top: 24px; bottom: 18px;
+    width: 13px;
+    background-image: radial-gradient(circle at 6.5px 6.5px, #efebe9 3.4px, rgba(0,0,0,.06) 4px, transparent 4.4px);
+    background-size: 13px 34px;
+  }
+  .topic-item { padding-bottom: 12px; }
+  .topic-title-row { display: flex; align-items: center; gap: 10px; }
+  .check-box {
+    flex: 0 0 auto;
+    width: 19px; height: 19px;
+    border: 2px solid var(--ink);
+    border-radius: 4px;
+    background: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .check-tick { color: var(--accent); font-weight: 700; font-size: 14px; line-height: 1; }
+  .topic-title { font-family: var(--font-title); font-size: 19px; color: #4e342e; padding: 0 5px; border-radius: 3px; }
+  .hl-pink { background: linear-gradient(to bottom, transparent 55%, var(--pink) 55%, var(--pink) 92%, transparent 92%); }
+  .hl-blue { background: linear-gradient(to bottom, transparent 55%, var(--blue) 55%, var(--blue) 92%, transparent 92%); }
+  .hl-green { background: linear-gradient(to bottom, transparent 55%, var(--green) 55%, var(--green) 92%, transparent 92%); }
+  .topic-index { margin-left: auto; font-size: 11px; color: var(--ink-faint); }
+  .topic-contribs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 7px 0 0 29px; }
+  .contrib-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #fff;
+    border: 1.5px solid var(--c);
+    border-radius: 999px;
+    padding: 2px 9px 2px 3px;
+    font-size: 11.5px;
+    color: var(--ink);
+  }
+  .mini-avatar {
+    width: 16px; height: 16px; border-radius: 50%;
+    color: #fff; font-size: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .contrib-label { font-size: 10.5px; color: var(--ink-faint); }
+  .topic-detail { margin: 7px 0 0 29px; font-size: 13.5px; line-height: 28px; color: var(--ink); }
+  .mention {
+    display: inline-block;
+    background: #fff3e0;
+    border: 1px solid #ffcc80;
+    border-radius: 999px;
+    padding: 0 8px;
+    font-size: 12px;
+    color: #e65100;
+    white-space: nowrap;
+  }
+
+  /* ---------- 今日总结 ---------- */
+  .recap-card {
+    position: relative;
+    margin-top: 16px;
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    padding: 18px 22px 14px;
+    box-shadow: 5px 5px 0 var(--purple);
+  }
+  .recap-tape {
+    position: absolute;
+    top: -9px; left: 26px;
+    width: 84px; height: 16px;
+    background: rgba(149, 117, 205, .4);
+    transform: rotate(-2.5deg);
+  }
+  .recap-text { margin: 0; font-family: var(--font-hand); font-size: 15px; line-height: 1.9; color: #4e342e; }
+  .recap-sign { margin-top: 8px; text-align: right; font-family: var(--font-hand); font-size: 12.5px; color: var(--ink-3); }
+
+  /* ---------- 群友侧写 ---------- */
+  .masonry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 16px; }
+  .user-card {
+    position: relative;
+    background: #fffbf0;
+    border: 2px solid var(--ink);
+    border-radius: 12px;
+    padding: 15px 16px 13px;
+    transform: rotate(var(--tilt));
+    box-shadow: 4px 4px 0 rgba(93, 64, 55, .1);
+    margin-top: 8px;
+  }
+  .u-head { display: flex; align-items: center; gap: 10px; }
+  .u-avatar {
+    flex: 0 0 auto;
+    width: 38px; height: 38px; border-radius: 50%;
+    color: #fff;
+    font-family: var(--font-title);
+    font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1.5px var(--ink);
+  }
+  .u-name { font-family: var(--font-title); font-size: 17px; color: #4e342e; line-height: 1.2; }
+  .u-title { margin-top: 2px; font-size: 12px; color: var(--ink-2); }
+  .badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .badge.mbti { background: var(--mbti-bg); border: 1.5px solid var(--mbti-border); color: var(--mbti-text); }
+  .badge.tag { background: #f5f5f5; border: 1px solid #bdbdbd; color: #616161; }
+  .u-badges { margin: 9px 0 0 48px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .u-reason {
+    margin: 10px 0 0;
+    background: #f8fbff;
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ink);
+  }
+
+  /* ---------- 页角金句 ---------- */
+  .quote-block { margin-top: 18px; }
+  .q-sender { display: flex; align-items: center; gap: 8px; }
+  .q-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    color: #fff; font-size: 13px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1.5px var(--ink);
+  }
+  .q-sender-name {
+    font-family: var(--font-hand);
+    font-size: 14.5px;
+    color: #4e342e;
+    background: linear-gradient(to bottom, transparent 62%, #fff59d 62%, #fff59d 94%, transparent 94%);
+    padding: 0 3px;
+  }
+  .q-bubble {
+    margin-top: 9px;
+    background: #fff;
+    border: 1.5px solid rgba(93, 64, 55, .25);
+    border-radius: 14px 14px 14px 3px;
+    box-shadow: 4px 4px 0 var(--pink);
+    padding: 14px 18px;
+  }
+  .quote-block.alt .q-bubble { background: var(--title-bg); box-shadow: 4px 4px 0 var(--blue); border-radius: 14px 14px 3px 14px; }
+  .q-text { margin: 0; font-family: var(--font-hand); font-size: 17px; line-height: 1.7; color: #4e342e; }
+  .q-analysis-note {
+    margin: 9px 0 0 34px;
+    background: var(--title-bg);
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: #6d4c41;
+  }
+  .quote-block.alt .q-analysis-note { background: #f3e5f5; border-left-color: var(--mbti-border); }
+  .note-label {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--title-text);
+  }
+  .quote-block.alt .note-label { color: #6a1b9a; }
+  .note-text { margin: 0; }
+
+  /* ---------- 聊天天气 ---------- */
+  .mood-card {
+    position: relative;
+    margin-top: 16px;
+    background: #fffbe6;
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    padding: 22px 20px 18px;
+  }
+  .mood-title-badge {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    font-family: var(--font-title);
+    font-size: 18px;
+    padding: 5px 16px;
+    border-radius: 8px;
+    transform: rotate(-1deg);
+    box-shadow: 3px 3px 0 rgba(0,0,0,.1);
+  }
+  .mood-subtitle { margin: 8px 0 0 4px; font-size: 12px; color: var(--ink-3); }
+  .dimension-bar {
+    display: flex;
+    height: 26px;
+    margin-top: 16px;
+    border: 1.5px solid var(--ink);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .dimension-segment { height: 100%; }
+  .dim-stickers { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+  .dim-sticker {
+    position: relative;
+    background: #fff;
+    border: 1.5px solid var(--dc);
+    border-radius: 10px;
+    padding: 11px 13px 10px;
+    transform: rotate(var(--tilt));
+  }
+  .dim-name { font-family: var(--font-title); font-size: 15px; color: #4e342e; }
+  .dim-pct { margin-left: 7px; font-weight: 700; font-size: 14px; color: var(--dc); }
+  .dim-comment { margin: 5px 0 0; font-size: 12px; line-height: 1.6; color: #6d4c41; }
+  .character-summary { display: flex; align-items: flex-end; gap: 14px; margin-top: 20px; }
+  .summary-character { max-height: 130px; max-width: 170px; object-fit: contain; }
+  .speech-bubble {
+    flex: 1 1 auto;
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 16px 16px 16px 4px;
+    padding: 12px 16px;
+    font-family: var(--font-hand);
+    font-size: 14.5px;
+    line-height: 1.75;
+    color: #4e342e;
+  }
+  .speech-bubble p { margin: 0; }
+
+  /* ---------- 咖啡 / 碎碎念 ---------- */
+  .coffee-card {
+    margin-top: 30px;
+    background: #f6ecdd;
+    border: 2px dashed #a1887f;
+    border-radius: 14px;
+    padding: 16px 20px;
+  }
+  .coffee-head { font-family: var(--font-title); font-size: 17px; color: #6d4c41; }
+  .coffee-text { margin: 7px 0 0; font-family: var(--font-hand); font-size: 14.5px; line-height: 1.75; color: #5d4037; }
+  .murmur-card {
+    margin-top: 16px;
+    background: #edf3fa;
+    border: 2px dashed #90a4ae;
+    border-radius: 14px;
+    padding: 16px 20px;
+  }
+  .murmur-head { font-family: var(--font-title); font-size: 17px; color: #546e7a; }
+  .murmur-text { margin: 7px 0 0; font-family: var(--font-hand); font-size: 14.5px; line-height: 1.75; color: #4e5a63; }
+  .murmur-sign { margin-top: 7px; text-align: right; font-family: var(--font-hand); font-size: 13px; color: #90a4ae; }
+
+  /* ---------- 页脚 ---------- */
+  .footer {
+    margin-top: 30px;
+    border: 2px dashed var(--ink-faint);
+    border-radius: 12px;
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 1.25fr 1fr 1fr;
+    gap: 12px;
+  }
+  .footer-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--ink-2);
+  }
+  .footer-card strong { font-family: var(--font-title); font-size: 13.5px; color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header class="header">
+    <div class="brand-row">
+      <span class="brand">{{ brand_text }}</span>
+      <span class="room">{{ room_name }}</span>
+    </div>
+    <div class="header-main">
+      <div class="header-left">
+        <div class="title-sticker">
+          <div class="tape"></div>
+          <div class="tape tape-blue"></div>
+          <h1>{{ page_title }}</h1>
+        </div>
+        <div>
+          {% if stamp_text %}<span class="stamp-note">{{ stamp_text }}</span>{% endif %}
+        </div>
+        <p class="greeting">{{ greeting }}</p>
+      </div>
+      <div class="header-right">
+        {% if character_uri %}<div class="character"><img src="{{ character_uri }}" alt=""></div>{% endif %}
+        <div class="date-badge">{{ date_text }}</div>
+      </div>
+    </div>
+  </header>
+
+  <section class="stats-grid">
+    <div class="stat-stamp"><div class="stat-num">{{ stats.message_count }}</div><div class="stat-label">收录于摘录的消息</div></div>
+    <div class="stat-stamp"><div class="stat-num">{{ stats.member_count }}</div><div class="stat-label">参与聊天的人数</div></div>
+    <div class="stat-stamp"><div class="stat-num">{{ stats.char_count }}</div><div class="stat-label">留在纸页上的文字</div></div>
+    <div class="stat-stamp"><div class="stat-num">{{ stats.emoji_count }}</div><div class="stat-label">贴在纸页上的表情</div></div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <span class="section-tag">TIME</span>
+      <h2>{{ section.time }}</h2>
+      <span class="section-note">24 小时时间轴 · 最活跃 {{ peak_text }}</span>
+    </div>
+    <div class="chart-card">
+      <div class="coil"></div>
+      <div class="chart">
+        {% for h in hourly %}
+        <div class="bar-col">
+          <div class="bar-count">{{ h.count if h.count > 0 else '' }}</div>
+          <div class="crayon-bar {{ 'peak' if h.peak else '' }}" style="height: {{ (6 + h.height * 1.54) | round | int }}px"></div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="chart-axis">
+        {% for h in hourly %}<span>{{ h.label }}</span>{% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <span class="section-tag">TOPIC</span>
+      <h2>{{ section.topic }}</h2>
+      <span class="section-note">{{ topic_note }}</span>
+    </div>
+    {% if topics %}
+    <div class="lined-paper">
+      <div class="paper-holes"></div>
+      {% for t in topics %}
+      <div class="topic-item">
+        <div class="topic-title-row">
+          <span class="check-box"><span class="check-tick">✓</span></span>
+          <span class="topic-title hl-{{ t.title_hl }}">{{ t.title }}</span>
+          <span class="topic-index">#{{ '%02d' | format(t.index) }}</span>
+        </div>
+        {% if t.contributors %}
+        <div class="topic-contribs">
+          {% for c in t.contributors %}
+          <span class="contrib-chip" style="--c: {{ c.color }}"><span class="mini-avatar" style="background: {{ c.color }}">{{ c.initial }}</span>{{ c.name }}</span>
+          {% endfor %}
+          <span class="contrib-label">参与了这段</span>
+        </div>
+        {% endif %}
+        <p class="topic-detail">{{ t.detail_html | safe }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+
+  {% if recap.enabled %}
+  <section class="section">
+    <div class="section-head">
+      <span class="section-tag">RECAP</span>
+      <h2>{{ recap.title }}</h2>
+      <span class="section-note">{{ recap.note }}</span>
+    </div>
+    <div class="recap-card">
+      <div class="recap-tape"></div>
+      <p class="recap-text">{{ recap.text | safe }}</p>
+      <div class="recap-sign">—— {{ bot_name }} 记于 {{ date_text }}</div>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="section">
+    <div class="section-head">
+      <span class="section-tag">PEOPLE</span>
+      <h2>{{ section.people }}</h2>
+      <span class="section-note">{{ people_note }}</span>
+    </div>
+    {% if portraits %}
+    <div class="masonry-grid">
+      {% for p in portraits %}
+      <div class="user-card" style="--tilt: {{ p.tilt }}">
+        <div class="card-tape"></div>
+        <div class="u-head">
+          <span class="u-avatar" style="background: {{ p.color }}">{{ p.initial }}</span>
+          <div class="u-name-block">
+            <div class="u-name">{{ p.name }}</div>
+            <div class="u-title">{{ p.title }}</div>
+          </div>
+        </div>
+        {% if p.mbti or p.tag %}
+        <div class="u-badges">
+          {% if p.mbti %}<span class="badge mbti">{{ p.mbti }}</span>{% endif %}
+          {% if p.tag %}<span class="badge tag">{{ p.tag }}</span>{% endif %}
+        </div>
+        {% endif %}
+        <p class="u-reason">{{ p.desc }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <span class="section-tag">QUOTE</span>
+      <h2>{{ section.quote }}</h2>
+      <span class="section-note">{{ quote_note }}</span>
+    </div>
+    {% for q in quotes %}
+    <div class="quote-block {{ 'alt' if q.alt else '' }}">
+      <div class="q-sender">
+        <span class="q-avatar" style="background: {{ q.color }}">{{ q.initial }}</span>
+        <span class="q-sender-name">{{ q.sender }}</span>
+      </div>
+      <div class="q-bubble"><p class="q-text">“{{ q.text | safe }}”</p></div>
+      <div class="q-analysis-note">
+        <span class="note-label">{{ bot_name }}锐评</span>
+        <p class="note-text">{{ q.comment_html | safe }}</p>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <span class="section-tag">MOOD</span>
+      <h2>{{ section.mood }}</h2>
+      <span class="section-note">{{ mood.subtitle }}</span>
+    </div>
+    <div class="mood-card">
+      <div class="mood-card-tape"></div>
+      <div class="mood-title-badge">{{ mood.title }}</div>
+      {% if mood.has_dims %}
+      <div class="dimension-bar">
+        {% for seg in mood.bar %}
+        <div class="dimension-segment" style="width: {{ seg.pct }}%; background: {{ seg.color }}"></div>
+        {% endfor %}
+      </div>
+      <div class="dim-stickers">
+        {% for d in mood.dims %}
+        <div class="dim-sticker" style="--tilt: {{ d.tilt }}; --dc: {{ d.color }}">
+          <div class="small-tape"></div>
+          <div class="dim-head"><span class="dim-name">{{ d.name }}</span><span class="dim-pct">{{ d.percentage }}%</span></div>
+          <p class="dim-comment">{{ d.comment_html | safe }}</p>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="character-summary">
+        {% if character_uri %}<img class="summary-character" src="{{ character_uri }}" alt="">{% endif %}
+        <div class="speech-bubble"><p>{{ mood.summary }}</p></div>
+      </div>
+    </div>
+  </section>
+
+  {% if coffee.enabled %}
+  <section class="coffee-card">
+    <div class="coffee-head">☕ {{ coffee.title }}</div>
+    <p class="coffee-text">{{ coffee.text }}</p>
+  </section>
+  {% endif %}
+
+  {% if murmur.enabled %}
+  <section class="murmur-card">
+    <div class="murmur-head">{{ murmur.title }}</div>
+    <p class="murmur-text">{{ murmur.text }}</p>
+    <div class="murmur-sign">—— {{ bot_name }}</div>
+  </section>
+  {% endif %}
+
+  <footer class="footer">
+    <div class="footer-card">
+      <strong>{{ page_title }}</strong>
+      <span>{{ date_text }}</span>
+      <span>生成于 {{ generated_at }}</span>
+    </div>
+    <div class="footer-card">
+      <strong>group_notebook {{ footer.version }}</strong>
+      <span>{{ footer.note }}</span>
+      <span>来源 {{ source }}</span>
+    </div>
+    <div class="footer-card">
+      <strong>{{ footer.brand }}</strong>
+      <span>手账 · 摘录 · 聊天天气</span>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -170,6 +170,7 @@ def create_app(plugin: Any) -> FastAPI:
                 "http_base_url": base_url,
                 "webui_url": f"{base_url}{route_path.rstrip('/')}/" if base_url else "",
                 "latest_url": _report_url(latest["slug"], latest["date"], route_path) if latest else "",
+                "render_engine": cfg.notebook.render_engine,
             }
         )
 

@@ -258,6 +258,56 @@ def plugin_version(base_dir: Path) -> str:
         return "v0.0.0"
 
 
+_EDGE_PATHS = (
+    "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+)
+_CHROME_PATHS = (
+    "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+)
+
+
+def playwright_channel_available(channel: str) -> bool:
+    """快速探测截图浏览器是否可用（不做真实启动）。
+
+    channel 为空表示 Playwright 自带 chromium，检查 ms-playwright 缓存目录；
+    msedge / chrome 检查系统标准安装路径。无法确认时按可用处理（交由真实
+    启动兜底），只在明确不存在时返回 False。
+    """
+    text = (channel or "").strip().lower()
+    import glob as _glob
+    import os
+
+    if text == "msedge":
+        return any(Path(p).is_file() for p in _EDGE_PATHS) or bool(
+            os.environ.get("PROGRAMFILES(X86)")
+            and Path(_EDGE_PATHS[0]).is_file()
+        )
+    if text == "chrome":
+        return any(Path(p).is_file() for p in _CHROME_PATHS)
+    if text in {"", "chromium", "none", "off"}:
+        local = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        pattern = str(Path(local) / "ms-playwright" / "chromium-*" / "chrome-win*" / "chrome.exe")
+        return bool(_glob.glob(pattern))
+    # 未知通道：交给真实启动去验证
+    return True
+
+
+def pick_engine(notebook_config: Any) -> str:
+    """根据配置与运行环境选定渲染引擎：返回 'playwright' 或 'pillow'。"""
+    engine = str(getattr(notebook_config, "render_engine", "") or "auto").strip().lower()
+    if engine == "pillow":
+        return "pillow"
+    if engine in {"playwright", "html", "browser"}:
+        return "playwright"
+    # auto：浏览器可用用 playwright，否则回退 pillow
+    channel = str(getattr(notebook_config, "browser_channel", "") or "").strip().lower()
+    if channel in {"none", "off", "chromium"}:
+        channel = ""
+    return "playwright" if playwright_channel_available(channel) else "pillow"
+
+
 class NotebookRenderer:
     """把 :class:`NotebookReport` 渲染成手账长图。"""
 

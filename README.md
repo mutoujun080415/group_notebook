@@ -7,7 +7,20 @@
 面向 [Neo-MoFox](https://github.com/MoFox-Studio/Neo-MoFox) 插件系统开发，遵循官方
 插件规范（`manifest.json` + 组件注册 + 插件面 API），视觉版式致敬
 [astrbot_plugin_qq_group_daily_analysis](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
-的 Scrapbook 手账主题，渲染管线为 **HTML 手账模板 + Playwright 截图**。
+的 Scrapbook 手账主题。
+
+## 双渲染引擎，可自主切换
+
+| 引擎 | 说明 | 适用 |
+| --- | --- | --- |
+| `playwright` | HTML 手账模板 + 浏览器截图，还原度最高 | 装了 Edge/Chrome 或 chromium 的设备 |
+| `pillow` | 纯 Pillow 手绘，**零浏览器依赖** | 任何设备开箱即用（Pillow 是 Neo-MoFox 核心自带依赖） |
+
+配置 `notebook.render_engine`：
+
+- `auto`（默认）：自动探测浏览器——有 Edge/Chrome/chromium 用 playwright，
+  没有自动落回 pillow；playwright 运行中失败也会自动回退 pillow，保证一定能出图
+- `playwright` / `pillow`：强制指定引擎
 
 ![效果](assets/preview.png)
 

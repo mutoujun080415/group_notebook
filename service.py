@@ -36,7 +36,7 @@ from .reports import ReportEntry, list_reports, slug_for_stream
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.2.1"
+_VERSION = "0.3.0"
 
 
 class NotebookService(BaseService):
@@ -52,6 +52,7 @@ class NotebookService(BaseService):
         super().__init__(plugin)
         self._locks: dict[str, asyncio.Lock] = {}
         self._renderer: NotebookRenderer | None = None
+        self._pillow_renderer: Any | None = None
 
     # ------------------------------------------------------------ 基础访问
 
@@ -197,7 +198,7 @@ class NotebookService(BaseService):
         )
 
         try:
-            await self.renderer().render(report, png_path, html_path)
+            engine_used = await self._render_report(report, png_path, html_path)
         except Exception as exc:
             logger.error(f"渲染群聊摘录失败：{exc}", exc_info=True)
             return False, f"手账渲染失败：{exc}", None
@@ -211,9 +212,39 @@ class NotebookService(BaseService):
             return False, f"摘录保存失败：{exc}", None
         self._cleanup_old_reports()
         logger.info(
-            f"群聊摘录已生成：{png_path}（来源 {report.source}，消息 {stats.message_count} 条）"
+            f"群聊摘录已生成：{png_path}（引擎 {engine_used}，来源 {report.source}，"
+            f"消息 {stats.message_count} 条）"
         )
-        return True, f"{day} 的摘录已生成（{stats.message_count} 条消息）", png_path
+        return True, (
+            f"{day} 的摘录已生成（{stats.message_count} 条消息，{engine_used} 引擎）"
+        ), png_path
+
+    async def _render_report(self, report: NotebookReport, png_path: Path, html_path: Path) -> str:
+        """按配置选择渲染引擎；auto 模式在浏览器不可用/渲染失败时自动回退 Pillow。"""
+        from .renderer import pick_engine
+
+        engine = pick_engine(self._config().notebook)
+        if engine == "playwright":
+            try:
+                await self.renderer().render(report, png_path, html_path)
+                return "playwright"
+            except Exception as exc:
+                if str(self._config().notebook.render_engine or "auto").strip().lower() == "playwright":
+                    raise  # 显式指定 playwright 时直接报错，提示用户换引擎
+                logger.warning(f"Playwright 渲染失败（{exc}），自动回退 Pillow 引擎")
+        pillow = self.pillow_renderer()
+        await asyncio.to_thread(pillow.render, report, png_path)
+        return "pillow"
+
+    def pillow_renderer(self):
+        """惰性创建 Pillow 渲染器。"""
+        if self._pillow_renderer is None:
+            from .pillow_renderer import PillowNotebookRenderer
+
+            self._pillow_renderer = PillowNotebookRenderer(
+                self._config(), base_dir=Path(__file__).resolve().parent
+            )
+        return self._pillow_renderer
 
     @staticmethod
     def _save_report(png_path: Path, json_path: Path, payload: dict[str, Any]) -> None:

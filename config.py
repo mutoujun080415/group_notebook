@@ -215,8 +215,13 @@ class GroupNotebookConfig(BaseConfig):
         )
         character_path: str = Field(
             default="",
-            description="右侧立绘图片路径（绝对路径，或相对插件目录）；留空则不显示立绘",
+            description="右侧立绘图片路径（绝对路径，或相对插件目录）；留空则不显示立绘（WebUI 上传的封面优先）",
             label="立绘路径",
+        )
+        render_engine: str = Field(
+            default="auto",
+            description="渲染引擎：auto（有浏览器用 Playwright，否则 Pillow）/ playwright / pillow",
+            label="渲染引擎",
         )
         browser_channel: str = Field(
             default="msedge",

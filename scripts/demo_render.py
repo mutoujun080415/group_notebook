@@ -196,11 +196,21 @@ def build_report() -> NotebookReport:
 
 
 async def main() -> int:
+    engine = "pillow" if "--engine" in sys.argv and "pillow" in sys.argv else "playwright"
     config = build_config()
     config.notebook.page_title = f"{config.notebook.bot_name}的群聊摘录"
     out_dir = PLUGIN_ROOT / "demo_out"
     out_dir.mkdir(exist_ok=True)
     report = build_report()
+    if engine == "pillow":
+        from group_notebook.pillow_renderer import PillowNotebookRenderer
+
+        renderer = PillowNotebookRenderer(config, base_dir=PLUGIN_ROOT)
+        width, height = await asyncio.to_thread(
+            renderer.render, report, out_dir / "demo_report.png"
+        )
+        print(f"OK: {out_dir / 'demo_report.png'}（pillow 引擎，{width}x{height}）")
+        return 0
     renderer = NotebookRenderer(config, base_dir=PLUGIN_ROOT)
     try:
         width, _height = await renderer.render(
@@ -208,7 +218,7 @@ async def main() -> int:
         )
     finally:
         await renderer.shutdown()
-    print(f"OK: {out_dir / 'demo_report.png'}（逻辑宽度 {width}px）")
+    print(f"OK: {out_dir / 'demo_report.png'}（playwright 引擎，逻辑宽度 {width}px）")
     return 0
 
 

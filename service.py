@@ -36,7 +36,7 @@ from .reports import ReportEntry, list_reports, slug_for_stream
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.1.0"
+_VERSION = "0.2.0"
 
 
 class NotebookService(BaseService):

@@ -105,6 +105,27 @@
   .toast[data-tone="error"] { background: #92242a; }
   .toast[data-tone="ok"] { background: #10714a; }
 
+  /* 封面/壁纸 */
+  .cover-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; padding: 14px 20px 18px; align-items: start; }
+  .cover-preview {
+    min-height: 148px; border-radius: 14px; border: 1px dashed #e8d3b8; background: #fffaf2;
+    display: grid; place-items: center; overflow: hidden; color: var(--muted); font-size: 12.5px;
+    text-align: center; padding: 12px;
+  }
+  .cover-preview img { max-width: 100%; max-height: 260px; display: block; border-radius: 12px; }
+  .cover-controls { display: flex; flex-direction: column; gap: 10px; }
+  .file-btn { display: inline-block; text-align: center; cursor: pointer; }
+  .focus-grid { display: grid; grid-template-columns: repeat(3, 34px); gap: 6px; }
+  .focus-grid button {
+    width: 34px; height: 30px; border-radius: 8px; border: 1px solid var(--line);
+    background: #fffdf8; cursor: pointer; font-size: 11px; color: var(--muted); padding: 0;
+  }
+  .focus-grid button[data-active="true"] {
+    border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700;
+  }
+  .cover-controls .range { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .cover-controls input[type="range"] { flex: 1; }
+
   @media (max-width: 900px) {
     .columns { grid-template-columns: 1fr; }
     .actions { margin-left: 0; }
@@ -144,6 +165,35 @@
       <button class="btn ghost" id="btn-preview" type="button">仅生成</button>
     </div>
     <div class="hint" id="conn-hint"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>封面壁纸</h2>
+      <span class="muted" id="cover-meta">未设置</span>
+    </div>
+    <div class="cover-body">
+      <div class="cover-preview" id="cover-preview">
+        <span id="cover-empty">还没有上传。上传一张图会替换手账右上角的立绘（优先级高于配置里的立绘路径），删掉就回到原样。</span>
+        <img id="cover-image" alt="封面预览" hidden>
+      </div>
+      <div class="cover-controls">
+        <label class="btn ghost file-btn">
+          上传壁纸
+          <input id="cover-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+        </label>
+        <div>
+          <div class="muted" style="margin-bottom:6px">焦点（裁切位置）</div>
+          <div class="focus-grid" id="focus-grid"></div>
+        </div>
+        <label class="range">
+          <span>立绘高度</span>
+          <input id="cover-height" type="range" min="200" max="380" step="10" value="300">
+          <span id="cover-height-text">300</span>
+        </label>
+        <button class="btn ghost" id="cover-delete" type="button">删除封面</button>
+      </div>
+    </div>
   </section>
 
   <section class="columns">
@@ -383,6 +433,115 @@ const pad = (value) => String(value).padStart(2, '0');
 $('inp-date').value = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
 
 refresh(true);
+
+/* ---------------- 封面壁纸 ---------------- */
+
+const FOCUS_CELLS = [
+  ['top-left', '↖'], ['top', '↑'], ['top-right', '↗'],
+  ['left', '←'], ['center', '·'], ['right', '→'],
+  ['bottom-left', '↙'], ['bottom', '↓'], ['bottom-right', '↘'],
+];
+
+let coverState = { exists: false, focus: 'center', height: 300 };
+
+function renderFocusGrid() {
+  const box = $('focus-grid');
+  box.innerHTML = '';
+  FOCUS_CELLS.forEach(([value, label]) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = label;
+    btn.title = value;
+    btn.dataset.value = value;
+    btn.dataset.active = String(coverState.focus === value);
+    btn.addEventListener('click', () => saveCoverParams({ focus: value }));
+    box.appendChild(btn);
+  });
+}
+
+async function loadCover() {
+  try {
+    const data = (await api('api/cover')) || {};
+    coverState = {
+      exists: Boolean(data.exists),
+      focus: data.focus || 'center',
+      height: Number(data.height) || 300,
+    };
+    if (coverState.exists) {
+      $('cover-image').src = 'api/cover/image?v=' + Date.now();
+      $('cover-image').hidden = false;
+      $('cover-empty').hidden = true;
+      $('cover-meta').textContent = '已设置 · ' + coverState.height + 'px' + (data.updated_at ? ' · ' + data.updated_at : '');
+    } else {
+      $('cover-image').hidden = true;
+      $('cover-empty').hidden = false;
+      $('cover-meta').textContent = '未设置';
+    }
+    $('cover-height').value = String(coverState.height);
+    $('cover-height-text').textContent = String(coverState.height);
+    renderFocusGrid();
+  } catch (error) {
+    $('cover-meta').textContent = '读取失败';
+  }
+}
+
+async function saveCoverParams(patch) {
+  try {
+    await api('api/cover', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    await loadCover();
+    toast('封面参数已保存', 'ok');
+  } catch (error) {
+    toast('保存失败：' + error.message, 'error');
+  }
+}
+
+$('cover-file').addEventListener('change', async (event) => {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  $('cover-meta').textContent = '上传中…';
+  try {
+    const response = await fetch('api/cover', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    });
+    let payload = null;
+    try { payload = await response.json(); } catch (error) { payload = null; }
+    if (!response.ok) throw new Error((payload && (payload.detail || payload.message)) || ('HTTP ' + response.status));
+    await loadCover();
+    toast('封面已更新，下一条摘录生效', 'ok');
+  } catch (error) {
+    $('cover-meta').textContent = '上传失败';
+    toast('上传失败：' + error.message, 'error');
+  } finally {
+    event.target.value = '';
+  }
+});
+
+$('cover-height').addEventListener('input', (event) => {
+  $('cover-height-text').textContent = event.target.value;
+});
+$('cover-height').addEventListener('change', (event) => {
+  saveCoverParams({ height: Number(event.target.value) });
+});
+
+$('cover-delete').addEventListener('click', async () => {
+  if (!coverState.exists) return;
+  if (!confirm('删除封面？手账会回到配置的立绘或默认页眉。')) return;
+  try {
+    await api('api/cover', { method: 'DELETE' });
+    await loadCover();
+    toast('封面已删除', 'ok');
+  } catch (error) {
+    toast('删除失败：' + error.message, 'error');
+  }
+});
+
+loadCover();
 </script>
 </body>
 </html>

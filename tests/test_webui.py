@@ -114,6 +114,57 @@ def test_index_page_served(client):
     assert "群聊摘录" in response.text
 
 
+PNG_1PX = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+    b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+@pytest.fixture()
+def cover_tmp(tmp_path, monkeypatch):
+    """把封面存储重定向到临时目录，避免测试污染工作目录。"""
+    from group_notebook import cover
+
+    monkeypatch.setattr(cover, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(cover, "COVER_DIR", tmp_path / "covers")
+    monkeypatch.setattr(cover, "META_FILE", tmp_path / "cover.json")
+    return tmp_path
+
+
+def test_cover_full_lifecycle(client, cover_tmp):
+    # 初始为空
+    assert client.get("/api/cover").json()["data"]["exists"] is False
+    # 上传
+    response = client.post("/api/cover", content=PNG_1PX)
+    assert response.status_code == 200
+    # 查询
+    data = client.get("/api/cover").json()["data"]
+    assert data["exists"] is True
+    assert data["focus"] == "center"
+    # 取图
+    image = client.get("/api/cover/image")
+    assert image.status_code == 200
+    # 调参数
+    updated = client.put("/api/cover", json={"focus": "top", "height": 340})
+    assert updated.json()["data"]["focus"] == "top"
+    assert updated.json()["data"]["height"] == 340
+    # 删除
+    assert client.delete("/api/cover").status_code == 200
+    assert client.get("/api/cover").json()["data"]["exists"] is False
+    assert client.get("/api/cover/image").status_code == 404
+
+
+def test_cover_upload_rejects_garbage(client, cover_tmp):
+    response = client.post("/api/cover", content=b"definitely not an image")
+    assert response.status_code == 400
+
+
+def test_cover_update_without_upload(client, cover_tmp):
+    response = client.put("/api/cover", json={"focus": "top"})
+    assert response.status_code == 400
+
+
 def test_state_exposes_dynamic_url_fields(client):
     """WebUI 地址必须由运行时解析，state 里提供完整地址与子路径字段。"""
     payload = client.get("/api/state").json()["data"]

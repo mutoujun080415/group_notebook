@@ -16,7 +16,13 @@ from group_notebook.models import (
     QuoteItem,
     Topic,
 )
-from group_notebook.renderer import NotebookRenderer, color_for, initial_for, rich_html
+from group_notebook.renderer import (
+    NotebookRenderer,
+    character_info,
+    color_for,
+    initial_for,
+    rich_html,
+)
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 
@@ -145,6 +151,44 @@ class TestBuildContext:
         assert config.resolved_page_title() == "安安的群聊摘录"
         config.notebook.bot_name = "小狐"
         assert config.resolved_page_title() == "小狐的群聊摘录"
+
+    def test_character_absent_by_default(self, tmp_path, monkeypatch):
+        from group_notebook import cover
+
+        # 隔离封面存储，避免受工作目录残留数据影响
+        monkeypatch.setattr(cover, "DATA_DIR", tmp_path)
+        monkeypatch.setattr(cover, "COVER_DIR", tmp_path / "covers")
+        monkeypatch.setattr(cover, "META_FILE", tmp_path / "cover.json")
+
+        config = GroupNotebookConfig()
+        renderer = NotebookRenderer(config, base_dir=PLUGIN_ROOT)
+        context = renderer.build_context(_report())
+        assert context["character"]["present"] is False
+
+    def test_character_upload_takes_priority(self, tmp_path, monkeypatch):
+        from group_notebook import cover
+
+        monkeypatch.setattr(cover, "DATA_DIR", tmp_path)
+        monkeypatch.setattr(cover, "COVER_DIR", tmp_path / "covers")
+        monkeypatch.setattr(cover, "META_FILE", tmp_path / "cover.json")
+        cover.save_upload(
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+            b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        cover.update(focus="top", height=340)
+
+        config = GroupNotebookConfig()
+        renderer = NotebookRenderer(config, base_dir=PLUGIN_ROOT)
+        character = character_info(config, PLUGIN_ROOT)
+        assert character["present"] is True
+        assert character["source"] == "upload"
+        assert "object-fit: cover" in character["style"]
+        assert "height: 340px" in character["style"]
+        assert "0% 100%" not in character["style"]  # top 焦点
+
+        context = renderer.build_context(_report())
+        assert context["character"]["present"] is True
 
 
 class TestRenderHtml:

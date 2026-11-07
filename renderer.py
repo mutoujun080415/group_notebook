@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import html as html_module
+import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -196,6 +197,67 @@ def character_uri(config: Any, base_dir: Path) -> str:
         return ""
 
 
+def character_info(config: Any, base_dir: Path) -> dict[str, Any]:
+    """解析页面右侧立绘：WebUI 上传的封面优先，其次配置里的 character_path。
+
+    返回包含 ``present`` 与现成的内联 ``style`` 的字典，模板直接可用。
+    """
+    from . import cover
+
+    meta = cover.load_meta()
+    if meta:
+        path = cover.image_path()
+        if path is not None:
+            try:
+                # cover 模块存的是相对 cwd 的路径，转 file URI 前必须先绝对化
+                uri = path.resolve().as_uri()
+            except (OSError, ValueError):
+                uri = ""
+            if uri:
+                return {
+                    "present": True,
+                    "source": "upload",
+                    "uri": uri,
+                    "style": (
+                        f"width: 190px; height: {int(meta['height'])}px; "
+                        f"object-fit: cover; object-position: {cover.focus_to_css(meta['focus'])};"
+                        "border-radius: 12px;"
+                    ),
+                    "summary_style": "width: 120px; height: 120px; object-fit: cover; "
+                    f"object-position: {cover.focus_to_css(meta['focus'])};",
+                    "updated_at": meta.get("updated_at") or "",
+                }
+
+    uri = character_uri(config, base_dir)
+    if uri:
+        return {
+            "present": True,
+            "source": "config",
+            "uri": uri,
+            "style": "max-height: 215px; max-width: 200px; object-fit: contain;",
+            "summary_style": "max-height: 130px; max-width: 170px; object-fit: contain;",
+            "updated_at": "",
+        }
+
+    return {
+        "present": False,
+        "source": "",
+        "uri": "",
+        "style": "",
+        "summary_style": "",
+        "updated_at": "",
+    }
+
+
+def plugin_version(base_dir: Path) -> str:
+    """从 manifest.json 读取插件版本号，供页脚展示。"""
+    try:
+        data = json.loads((Path(base_dir) / "manifest.json").read_text(encoding="utf-8"))
+        return "v" + str(data.get("version") or "0.0.0")
+    except (OSError, ValueError):
+        return "v0.0.0"
+
+
 class NotebookRenderer:
     """把 :class:`NotebookReport` 渲染成手账长图。"""
 
@@ -358,9 +420,9 @@ class NotebookRenderer:
             "footer": {
                 "brand": notebook.brand_text,
                 "note": "Neo-MoFox · 群聊摘录插件",
-                "version": "v0.1.0",
+                "version": plugin_version(self._base_dir),
             },
-            "character_uri": character_uri(self._config, self._base_dir),
+            "character": character_info(self._config, self._base_dir),
             "fonts_css": fonts_css(self._base_dir),
         }
 

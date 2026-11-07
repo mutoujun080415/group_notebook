@@ -11,13 +11,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from src.app.plugin_system.api.log_api import get_logger
 from src.app.plugin_system.types import ChatStream
 
+from . import cover
 from .collector import today_in_timezone
 from .config import GroupNotebookConfig
 from .reports import is_valid_day, report_file, report_url, slug_for_stream
@@ -203,6 +204,66 @@ def create_app(plugin: Any) -> FastAPI:
             media_type="image/png",
             headers={"Cache-Control": "private, max-age=60"},
         )
+
+    @app.get("/api/cover")
+    async def get_cover() -> dict[str, Any]:
+        """当前封面状态（没有也返回 200，页面好渲染空状态）。"""
+        meta = cover.load_meta()
+        return _ok(
+            {
+                "exists": bool(meta),
+                "focus": meta.get("focus") or cover.DEFAULT_FOCUS,
+                "height": int(meta.get("height") or cover.DEFAULT_HEIGHT),
+                "updated_at": str(meta.get("updated_at") or ""),
+                "url": "/api/cover/image" if meta else "",
+                "focusChoices": list(cover.FOCUS_CHOICES),
+                "minHeight": cover.MIN_HEIGHT,
+                "maxHeight": cover.MAX_HEIGHT,
+                "maxBytes": cover.MAX_BYTES,
+            }
+        )
+
+    @app.get("/api/cover/image")
+    async def get_cover_image() -> FileResponse:
+        """封面原图，用于页面里的预览。"""
+        path = cover.image_path()
+        if path is None:
+            raise HTTPException(status_code=404, detail="还没有封面")
+        media_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+        return FileResponse(
+            path=str(path),
+            media_type=media_type,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/cover")
+    async def upload_cover(request: Request) -> dict[str, Any]:
+        """上传封面：请求体就是图片字节（不做 multipart，少一个依赖）。"""
+        data = await request.body()
+        try:
+            meta = cover.save_upload(data)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.info(f"封面已更新：{meta['path']}（焦点 {meta['focus']}，高度 {meta['height']}px）")
+        return _ok(meta, message="封面已更新，下一条摘录生效")
+
+    @app.put("/api/cover")
+    async def update_cover(payload: dict[str, Any]) -> dict[str, Any]:
+        """只调焦点/高度，不重新上传。"""
+        try:
+            meta = cover.update(
+                focus=payload.get("focus"),
+                height=payload.get("height"),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _ok(meta, message="封面参数已更新")
+
+    @app.delete("/api/cover")
+    async def delete_cover() -> dict[str, Any]:
+        """删除封面，海报回到配置的立绘/默认页眉。"""
+        cover.clear()
+        return _ok({"exists": False}, message="封面已删除")
 
     @app.post("/api/generate")
     async def generate(payload: GeneratePayload) -> dict[str, Any]:

@@ -507,7 +507,7 @@
         <p class="greeting">{{ greeting }}</p>
       </div>
       <div class="header-right">
-        {% if character_uri %}<div class="character"><img src="{{ character_uri }}" alt=""></div>{% endif %}
+        {% if character.present %}<div class="character"><img src="{{ character.uri }}" style="{{ character.style }}" alt=""></div>{% endif %}
         <div class="date-badge">{{ date_text }}</div>
       </div>
     </div>
@@ -666,7 +666,7 @@
       </div>
       {% endif %}
       <div class="character-summary">
-        {% if character_uri %}<img class="summary-character" src="{{ character_uri }}" alt="">{% endif %}
+        {% if character.present %}<img class="summary-character" src="{{ character.uri }}" style="{{ character.summary_style }}" alt="">{% endif %}
         <div class="speech-bubble"><p>{{ mood.summary }}</p></div>
       </div>
     </div>

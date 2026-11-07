@@ -26,6 +26,9 @@
   `config/core.toml` 的 `[http_router]`（`http_router_host` / `http_router_port`），
   形如 `http://<host>:<port>/plugins/group-notebook/`；插件加载日志会打印完整地址，
   页面页脚也会显示当前地址。选群选日期、历史画廊、手账预览、手动生成，不依赖官方 Plugin UI。
+- **封面壁纸**：独立页面上传壁纸（PNG/JPEG/WebP/GIF，≤8MB），支持九宫格焦点裁切
+  与立绘高度调节，改参数不用重新上传；上传的封面优先于配置里的
+  `notebook.character_path`，删除封面即回退。
 
 ## 安装
 

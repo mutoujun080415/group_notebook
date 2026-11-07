@@ -1,22 +1,53 @@
 {
   "name": "group_notebook",
   "display_name": "群聊摘录 · Group Notebook",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "summary": "把群聊一天的内容整理成一张手账风「群聊摘录」长图",
   "description": "统计群聊消息量、参与人数、字数、表情与 24 小时活跃度，调用模型提炼今日话题、群友侧写、页角金句与聊天天气，再用 HTML 手账模板 + Playwright 截图渲染成一张可直接发群的长图；支持每天定时投递、/摘录 手动补发，并自带一个挂到主程序 HTTP 服务器的独立页面（历史画廊、海报预览、手动生成），不依赖官方 Plugin UI。",
   "author": "MoFox Community",
-  "maintainers": ["MoFox Community"],
-  "categories": ["tool"],
-  "tags": ["daily-log", "summary", "notebook", "group", "report", "webui"],
+  "maintainers": [
+    "MoFox Community"
+  ],
+  "categories": [
+    "tool"
+  ],
+  "tags": [
+    "daily-log",
+    "summary",
+    "notebook",
+    "group",
+    "report",
+    "webui"
+  ],
   "dependencies": {
     "plugins": [],
     "components": []
   },
   "include": [
-    { "component_type": "config", "component_name": "config", "dependencies": [], "enabled": true },
-    { "component_type": "service", "component_name": "notebook_service", "dependencies": [], "enabled": true },
-    { "component_type": "command", "component_name": "摘录", "dependencies": [], "enabled": true },
-    { "component_type": "router", "component_name": "notebook_webui", "dependencies": [], "enabled": true }
+    {
+      "component_type": "config",
+      "component_name": "config",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "service",
+      "component_name": "notebook_service",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "command",
+      "component_name": "摘录",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "router",
+      "component_name": "notebook_webui",
+      "dependencies": [],
+      "enabled": true
+    }
   ],
   "entry_point": "plugin.py",
   "api_version": {
@@ -27,6 +58,9 @@
     "service_api": "1.0.0"
   },
   "min_core_version": "1.3.0-alpha.0",
-  "python_dependencies": ["jinja2>=3.1", "playwright>=1.40"],
+  "python_dependencies": [
+    "jinja2>=3.1",
+    "playwright>=1.40"
+  ],
   "dependencies_required": true
 }

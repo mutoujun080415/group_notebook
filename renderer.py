@@ -476,7 +476,13 @@ class NotebookRenderer:
             device_scale_factor=scale,
         )
         try:
-            await page.goto(html_path.as_uri(), wait_until="load")
+            # 服务层传进来的可能是相对 bot 根目录的路径（data/...），
+            # file URI 必须用绝对路径，这里统一 resolve。
+            try:
+                html_uri = html_path.resolve().as_uri()
+            except (OSError, ValueError) as exc:
+                raise RuntimeError(f"渲染中间页路径无效：{html_path}") from exc
+            await page.goto(html_uri, wait_until="load")
             try:
                 await page.evaluate("document.fonts.ready")
             except Exception:

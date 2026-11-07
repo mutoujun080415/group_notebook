@@ -224,3 +224,25 @@ class TestRenderHtml:
         html = renderer.render_html(report)
         assert "<img src=x" not in html
         assert "&lt;img" in html
+
+
+class TestScreenshotWithServicePaths:
+    def test_relative_service_paths_render(self, tmp_path, monkeypatch):
+        """回归：bot 以根目录为 cwd 运行时，服务层传进来的是相对路径
+        （data/group_notebook/...），渲染必须照常工作，不允许再抛
+        "relative path can't be expressed as a file URI"。"""
+        pytest.importorskip("playwright")
+        import asyncio
+
+        monkeypatch.chdir(tmp_path)  # 模拟 bot 根目录
+        config = GroupNotebookConfig()
+        renderer = NotebookRenderer(config, base_dir=PLUGIN_ROOT)
+        png_rel = Path("data") / "group_notebook" / "reports" / "abc" / "2026-11-05.png"
+        html_rel = Path("data") / "group_notebook" / "render" / "abc" / "2026-11-05.html"
+        try:
+            _width, height = asyncio.run(renderer.render(_report(), png_rel, html_rel))
+        finally:
+            asyncio.run(renderer.shutdown())
+        assert png_rel.is_file()
+        assert png_rel.stat().st_size > 0
+        assert height > 600

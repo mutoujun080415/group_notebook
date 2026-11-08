@@ -44,7 +44,7 @@ from .reports import ReportEntry, list_reports, slug_for_stream
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.6.2"
+_VERSION = "0.6.3"
 
 
 class NotebookService(BaseService):
@@ -101,8 +101,8 @@ class NotebookService(BaseService):
 
     def report_paths(self, stream_id: str, day: str,
                      kind: str = "day") -> tuple[Path, Path, Path]:
-        """返回 (PNG 路径, JSON 路径, HTML 路径)；kind=week 时文件名带 week- 前缀。"""
-        prefix = "week-" if kind == "week" else ""
+        """返回 (PNG 路径, JSON 路径, HTML 路径)；week/dossier 带对应前缀。"""
+        prefix = {"week": "week-", "dossier": "dossier-"}.get(kind, "")
         folder = self.report_dir(stream_id)
         html_folder = self.render_dir(stream_id)
         return (
@@ -322,28 +322,12 @@ class NotebookService(BaseService):
                 return False, message
             png_path = path
 
-        from src.app.plugin_system.api.send_api import send_image
-
-        payload = base64.b64encode(png_path.read_bytes()).decode("ascii")
-        timeout = max(5, int(config.general.send_timeout_seconds))
-        try:
-            sent = await asyncio.wait_for(
-                send_image(
-                    payload,
-                    stream_id=stream_id,
-                    platform=config.general.platform,
-                    processed_plain_text=f"{target_day} 群聊摘录",
-                ),
-                timeout=timeout,
-            )
-        except TimeoutError:
-            logger.error(f"发送群聊摘录超时（{timeout}s）：stream={stream_id} day={target_day}")
-            return False, f"摘录已生成，但发送超时（{timeout} 秒），适配器可能没响应"
-        except Exception as exc:
-            logger.error(f"发送群聊摘录失败：{exc}", exc_info=True)
-            return False, f"摘录已生成，但发送失败：{exc}"
+        sent, fail_reason = await self._send_image_with_retry(
+            png_path, stream_id, caption=f"{target_day} 群聊摘录"
+        )
         if not sent:
-            return False, "摘录已生成，但发送接口返回失败"
+            logger.error(f"发送群聊摘录失败：{fail_reason}：stream={stream_id} day={target_day}")
+            return False, f"摘录已生成，但{fail_reason}（已自动重试）"
         return True, f"{target_day} 的摘录已发出"
 
     async def preview(self, stream_id: str, day: str = "", *, room_name: str = "") -> tuple[bool, str]:
@@ -467,27 +451,12 @@ class NotebookService(BaseService):
                 return False, message
             png_path = path
 
-        from src.app.plugin_system.api.send_api import send_image
-
-        payload = base64.b64encode(png_path.read_bytes()).decode("ascii")
-        timeout = max(5, int(config.general.send_timeout_seconds))
-        try:
-            sent = await asyncio.wait_for(
-                send_image(
-                    payload,
-                    stream_id=stream_id,
-                    platform=config.general.platform,
-                    processed_plain_text=f"{monday} 当周群聊周记",
-                ),
-                timeout=timeout,
-            )
-        except TimeoutError:
-            return False, f"周记已生成，但发送超时（{timeout} 秒）"
-        except Exception as exc:
-            logger.error(f"发送群聊周记失败：{exc}", exc_info=True)
-            return False, f"周记已生成，但发送失败：{exc}"
+        sent, fail_reason = await self._send_image_with_retry(
+            png_path, stream_id, caption=f"{monday} 当周群聊周记"
+        )
         if not sent:
-            return False, "周记已生成，但发送接口返回失败"
+            logger.error(f"发送群聊周记失败：{fail_reason}：stream={stream_id} week={monday}")
+            return False, f"周记已生成，但{fail_reason}（已自动重试）"
         return True, f"{monday} 当周的周记已发出"
 
     # ------------------------------------------------------------ 定时辅助
@@ -758,27 +727,12 @@ class NotebookService(BaseService):
                 return False, message
             png_path = path
 
-        from src.app.plugin_system.api.send_api import send_image
-
-        payload = base64.b64encode(png_path.read_bytes()).decode("ascii")
-        timeout = max(5, int(config.general.send_timeout_seconds))
-        try:
-            sent = await asyncio.wait_for(
-                send_image(
-                    payload,
-                    stream_id=stream_id,
-                    platform=config.general.platform,
-                    processed_plain_text=f"{monday} 当周{self.dossier_title()}",
-                ),
-                timeout=timeout,
-            )
-        except TimeoutError:
-            return False, f"案底已生成，但发送超时（{timeout} 秒）"
-        except Exception as exc:
-            logger.error(f"发送案底失败：{exc}", exc_info=True)
-            return False, f"案底已生成，但发送失败：{exc}"
+        sent, fail_reason = await self._send_image_with_retry(
+            png_path, stream_id, caption=f"{monday} 当周{self.dossier_title()}"
+        )
         if not sent:
-            return False, "案底已生成，但发送接口返回失败"
+            logger.error(f"发送案底失败：{fail_reason}：stream={stream_id} week={monday}")
+            return False, f"案底已生成，但{fail_reason}（已自动重试）"
         return True, f"{monday} 当周的案底已发出"
 
     async def _render_dossier(self, report: Any, png_path: Path, html_path: Path) -> str:
@@ -797,6 +751,49 @@ class NotebookService(BaseService):
         pillow = self.pillow_renderer()
         await asyncio.to_thread(pillow.render_dossier, report, png_path)
         return "pillow"
+
+    async def _send_image_with_retry(
+        self,
+        png_path: Path,
+        stream_id: str,
+        *,
+        caption: str,
+        attempts: int = 3,
+    ) -> tuple[bool, str]:
+        """发送图片，失败自动重试（QQ 连接瞬断时自愈）。
+
+        Returns:
+            ``(是否成功, 失败说明)``——全部失败时才返回 False。
+        """
+        from src.app.plugin_system.api.send_api import send_image
+
+        config = self._config()
+        payload = base64.b64encode(png_path.read_bytes()).decode("ascii")
+        timeout = max(5, int(config.general.send_timeout_seconds))
+        last_error = ""
+        for attempt in range(1, max(1, attempts) + 1):
+            try:
+                sent = await asyncio.wait_for(
+                    send_image(
+                        payload,
+                        stream_id=stream_id,
+                        platform=config.general.platform,
+                        processed_plain_text=caption,
+                    ),
+                    timeout=timeout,
+                )
+            except TimeoutError:
+                last_error = f"发送超时（{timeout} 秒）"
+            except Exception as exc:
+                last_error = f"发送失败：{exc}"
+            else:
+                if sent:
+                    return True, ""
+                last_error = "发送接口返回失败"
+            if attempt < attempts:
+                logger.warning(f"第 {attempt} 次发送未成功（{last_error}），6 秒后重试")
+                await asyncio.sleep(6)
+        return False, last_error
 
     # ------------------------------------------------------------ 周报定时辅助
 

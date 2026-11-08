@@ -579,6 +579,8 @@ class NotebookRenderer:
             "room_name": report.room_name,
             "bot_name": report.bot_name,
             "focus_word": report.focus_word,
+            "direction": report.direction,
+            "victim_display": report.victim_display or report.bot_name,
             "intro": rich_html(report.intro, []),
             "culprits": [
                 {

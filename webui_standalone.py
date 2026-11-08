@@ -22,6 +22,7 @@ from . import cover
 from .collector import (
     fetch_range_messages,
     member_bot_stats,
+    member_target_stats,
     monday_of,
     range_days,
     split_bot_messages,
@@ -118,6 +119,7 @@ class DossierPayload(BaseModel):
 
     group_id: str = Field(default="", description="群号，留空用第一个配置群")
     date: str = Field(default="", description="该周内任意日期 YYYY-MM-DD，留空为本周")
+    direction: str = Field(default="", description="member_as_culprit（成员迫害bot）/ member_as_victim（成员被围攻），留空用配置默认")
     members: list[str] = Field(default_factory=list, description="聚焦成员 QQ 号列表，留空自动 Top N")
     send: bool = Field(default=False, description="生成后是否发群")
     regenerate: bool = Field(default=False, description="已有图也重新生成")
@@ -345,17 +347,26 @@ def create_app(plugin: Any) -> FastAPI:
             str(message.get("sender_id") or "")
             for message in bot_messages if str(message.get("sender_id") or "")
         }
-        stats = member_bot_stats(
+        out_stats = member_bot_stats(
             human + bot_messages, bot_ids=bot_ids,
             bot_name=cfg.notebook.bot_name,
         )
-        members = sorted(stats.items(), key=lambda item: item[1]["count"], reverse=True)
+        target_stats = member_target_stats(human + bot_messages)
+        all_ids = set(out_stats) | set(target_stats)
+        members = []
+        for sender in all_ids:
+            name = (out_stats.get(sender) or target_stats.get(sender) or {}).get("name", sender)
+            members.append({
+                "qq": sender,
+                "name": name,
+                "out_count": out_stats.get(sender, {}).get("count", 0),
+                "in_count": target_stats.get(sender, {}).get("count", 0),
+            })
+        members.sort(key=lambda item: max(item["out_count"], item["in_count"]),
+                     reverse=True)
         return _ok({
             "week": monday,
-            "members": [
-                {"qq": sender, "name": info["name"], "count": info["count"]}
-                for sender, info in members[:30]
-            ],
+            "members": members[:30],
         })
 
     @app.post("/api/generate_dossier")
@@ -382,12 +393,14 @@ def create_app(plugin: Any) -> FastAPI:
                 ok, message = await svc.send_dossier(
                     stream_id, monday, room_name=row["name"],
                     members=payload.members or None,
+                    direction=payload.direction,
                     regenerate=payload.regenerate,
                 )
             else:
                 ok, message, _path = await svc.generate_dossier(
                     stream_id, monday, room_name=row["name"],
                     members=payload.members or None,
+                    direction=payload.direction,
                     force=payload.regenerate,
                 )
         except Exception as exc:

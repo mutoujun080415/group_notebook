@@ -389,6 +389,8 @@ class DossierReport:
     period_text: str
     case_no: str = ""
     focus_word: str = ""
+    direction: str = "member_as_culprit"
+    victim_display: str = ""
     intro: str = ""
     culprits: list[DossierCulprit] = field(default_factory=list)
     cases: list[DossierCase] = field(default_factory=list)
@@ -407,6 +409,8 @@ class DossierReport:
             "period_text": self.period_text,
             "case_no": self.case_no,
             "focus_word": self.focus_word,
+            "direction": self.direction,
+            "victim_display": self.victim_display,
             "intro": self.intro,
             "culprits": [item.to_dict() for item in self.culprits],
             "cases": [item.to_dict() for item in self.cases],
@@ -427,6 +431,8 @@ class DossierReport:
             period_text=str(data.get("period_text") or ""),
             case_no=str(data.get("case_no") or ""),
             focus_word=str(data.get("focus_word") or ""),
+            direction=str(data.get("direction") or "member_as_culprit"),
+            victim_display=str(data.get("victim_display") or ""),
             intro=str(data.get("intro") or ""),
             culprits=[
                 DossierCulprit(

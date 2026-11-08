@@ -317,6 +317,11 @@ class GroupNotebookConfig(BaseConfig):
             description="筛选焦点描述，喂给模型；留空自动使用「迫害{bot_name}」",
             label="焦点描述",
         )
+        default_direction: str = Field(
+            default="member_as_culprit",
+            description="案底方向默认值：member_as_culprit（成员迫害 bot）/ member_as_victim（成员被围攻）；WebUI 里每次可临时切换",
+            label="案底方向默认值",
+        )
         max_cases: int = Field(
             default=6,
             description="卷宗里展示的案件数量上限",

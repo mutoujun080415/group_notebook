@@ -227,3 +227,66 @@ class TestDossierRender:
         html = renderer.render_dossier_html(report)
         assert "迫害记录簿" in html and "主犯通缉栏" in html and "案件卷宗" in html
 
+
+
+class TestDirection:
+    def test_pool_victim_direction(self):
+        messages = [
+            {"message_id": "m1", "time": 1000.0, "sender_id": "u1", "sender_name": "阿鱼",
+             "processed_plain_text": "鹿目圆 今天也要被大家调戏呢"},
+            {"message_id": "m2", "time": 1001.0, "sender_id": "u2", "sender_name": "小别",
+             "processed_plain_text": "无关发言"},
+        ]
+        pool = collect_dossier_pool(
+            messages, bot_ids=set(), bot_name="小七",
+            direction="member_as_victim",
+            focus_members=["v-moku"],
+            victim_names={"v-moku": "鹿目圆"},
+            context=0,
+        )
+        assert [m["message_id"] for m in pool] == ["m1"]
+
+    def test_member_incoming_stats(self):
+        messages = [
+            {"message_id": "m1", "time": 1000.0, "sender_id": "u1", "sender_name": "阿鱼",
+             "processed_plain_text": "鹿目圆 你完蛋了"},
+            {"message_id": "m2", "time": 1001.0, "sender_id": "v-moku",
+             "sender_name": "鹿目圆", "processed_plain_text": "呜呜"},
+        ]
+        from group_notebook.collector import member_incoming_stats
+        stats = member_incoming_stats(
+            messages, victim_ids={"v-moku"}, victim_names={"v-moku": "鹿目圆"})
+        assert stats["u1"]["count"] == 1
+
+    def test_prompt_victim_direction(self):
+        system_prompt, user_prompt = build_dossier_prompt(
+            room_name="群", bot_name="小七", title="迫害记录簿",
+            focus_word="围攻鹿目圆", period_text="一周",
+            pool_transcript="x", culprit_lines="- a：1",
+            max_cases=6, top_members=3,
+            direction="member_as_victim", victim_display="鹿目圆",
+        )
+        assert "受害者是「鹿目圆」" in system_prompt
+        assert "可以包括 bot 本bot" in system_prompt
+        assert "受害者：鹿目圆" in user_prompt
+
+    def test_pillow_victim_direction_smoke(self, tmp_path):
+        pytest.importorskip("PIL")
+        from group_notebook.models import DossierCulprit, DossierCase
+        from group_notebook.pillow_dossier import PillowDossierRenderer
+        config = GroupNotebookConfig()
+        renderer = PillowDossierRenderer(config, base_dir=PLUGIN_ROOT)
+        from group_notebook.models import DossierReport
+        report = DossierReport(
+            date="2026-11-02", room_name="测试群", bot_name="小七",
+            page_title="围攻记录簿", period_text="一周",
+            direction="member_as_victim", victim_display="鹿目圆",
+            focus_word="围攻鹿目圆", case_no="C", intro="陈述",
+            culprits=[DossierCulprit(name="阿鱼", title="主谋", count=5, profile="画像")],
+            cases=[DossierCase(no=1, time="t", culprits=["阿鱼"], victim="鹿目圆",
+                               summary="经过", comment="批注", level=3)],
+            closing="结案", source="llm", generated_at="t",
+        )
+        png = tmp_path / "victim.png"
+        width, height = renderer.render(report, png)
+        assert width == 750 and height > 800 and png.stat().st_size > 10_000

@@ -96,7 +96,11 @@ class PillowDossierRenderer:
             self._text(draw, (x, ty), line, "title", 38, SEAL)
             ty += 48
         y = max(ty, y + 60) + 8
-        focus = f"专题焦点：{report.focus_word}　·　受害者：{report.bot_name}"
+        direction_text = ("成员迫害 bot" if report.direction == "member_as_culprit"
+                          else "成员被全群围攻")
+        victim_show = report.victim_display or report.bot_name
+        focus = (f"方向：{direction_text}　·　专题焦点：{report.focus_word}"
+                 f"　·　受害者：{victim_show}")
         self._text(draw, (x, y), focus, "hand", 15, INK2)
         y += 28
         # 印章（右）

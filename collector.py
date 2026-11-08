@@ -323,6 +323,44 @@ def split_day_periods(messages: list[dict[str, Any]], timezone_name: str) -> lis
     ]
 
 
+def member_target_stats(
+    messages: list[dict[str, Any]],
+    *,
+    exclude_ids: set[str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """统计每个成员『被指向』的次数（被回复 / 被@ / 名字被提及）。
+
+    Returns:
+        ``{victim_id: {"name": 昵称, "count": 被指向次数}}``。
+    """
+    id_to_name: dict[str, str] = {}
+    for message in messages:
+        sender = str(message.get("sender_id") or "")
+        if sender:
+            id_to_name.setdefault(sender, clean_text(message.get("sender_name") or sender, 24))
+    name_to_id = {name: sender for sender, name in id_to_name.items() if len(name) >= 2}
+
+    victim_counts: dict[str, dict[str, Any]] = {}
+    for message in messages:
+        sender = str(message.get("sender_id") or "")
+        text = clean_text(message.get("processed_plain_text") or "", 0)
+        reply_to = str(message.get("reply_to") or "")
+        targets: set[str] = set()
+        if reply_to and reply_to in id_to_name and reply_to != sender:
+            targets.add(reply_to)
+        for name, member_id in name_to_id.items():
+            if name in text and member_id != sender:
+                targets.add(member_id)
+        for target in targets:
+            if exclude_ids and target in exclude_ids:
+                continue
+            entry = victim_counts.setdefault(
+                target, {"name": id_to_name.get(target, target), "count": 0}
+            )
+            entry["count"] += 1
+    return victim_counts
+
+
 def member_bot_stats(
     messages: list[dict[str, Any]],
     *,
@@ -365,20 +403,17 @@ def collect_dossier_pool(
     *,
     bot_ids: set[str],
     bot_name: str,
+    direction: str = "member_as_culprit",
     focus_members: list[str] | None = None,
+    victim_names: dict[str, str] | None = None,
     context: int = 2,
 ) -> list[dict[str, Any]]:
-    """提取「与 bot 相关」的候选消息池（含前后 context 条上下文）。
+    """提取案底候选消息池（含前后 context 条上下文）。
 
     Args:
-        messages: 按时间升序的完整消息列表。
-        bot_ids: bot 自己的 sender_id 集合。
-        bot_name: bot 昵称（文本提及匹配）。
-        focus_members: 指定聚焦的 QQ 号列表；非空时只保留与他们相关的片段。
-        context: 每个命中点附带的前后上下文条数。
-
-    Returns:
-        去重后按时间升序排列的候选消息列表。
+        direction: ``member_as_culprit`` 收集「聚焦成员 → bot」的迫害记录；
+            ``member_as_victim`` 收集「全群 → 聚焦成员」的围攻记录。
+        focus_members: 聚焦的 QQ 号列表（culprit 方向=主犯，victim 方向=受害者）。
     """
     bot_message_ids = {
         str(message.get("message_id") or "")
@@ -391,27 +426,81 @@ def collect_dossier_pool(
     }
     focus_set = {str(member).strip() for member in (focus_members or []) if str(member).strip()}
 
+    def _sender_of(index_or_id: Any) -> str:
+        if isinstance(index_or_id, int):
+            return str(messages[index_or_index].get("sender_id") or "")
+        idx = id_to_index.get(str(index_or_id))
+        return str(messages[idx].get("sender_id") or "") if idx is not None else ""
+
     hit_indexes: set[int] = set()
     for index, message in enumerate(messages):
         sender = str(message.get("sender_id") or "")
         reply_to = str(message.get("reply_to") or "")
         text = clean_text(message.get("processed_plain_text") or "", 0)
-        sender_is_bot = sender in bot_ids
-        is_reply_to_bot = bool(reply_to) and reply_to in bot_message_ids
-        mentions_bot = bool(bot_name) and bot_name in text
-        if not (sender_is_bot or is_reply_to_bot or mentions_bot):
-            continue
-        if focus_set:
-            # 聚焦模式：命中消息的发送者或被回复者须与聚焦成员相关
-            replied_sender = ""
-            reply_index = id_to_index.get(reply_to)
-            if reply_index is not None:
-                replied_sender = str(messages[reply_index].get("sender_id") or "")
-            if not focus_set.intersection({sender, replied_sender}):
+        replied_sender = _sender_of(reply_to) if reply_to else ""
+
+        if direction == "member_as_victim":
+            # 围攻方向：命中 = 消息指向聚焦成员（回复他们 / 文本提及他们的昵称）
+            if sender in focus_set:
+                continue  # 受害者自己的发言不算被围攻
+            is_targeting = any(
+                name and name in text
+                for member_id, name in (victim_names or {}).items()
+                if member_id in focus_set
+            )
+            is_reply_to_victim = bool(reply_to) and _sender_of(reply_to) in focus_set
+            if not (is_targeting or is_reply_to_victim):
                 continue
+        else:
+            # 迫害方向：命中 = 消息指向 bot（回复 bot / @bot / 提及 bot）
+            sender_is_bot = sender in bot_ids
+            is_reply_to_bot = bool(reply_to) and reply_to in bot_message_ids
+            mentions_bot = bool(bot_name) and bot_name in text
+            if not (sender_is_bot or is_reply_to_bot or mentions_bot):
+                continue
+            if focus_set:
+                if not focus_set.intersection({sender, replied_sender}):
+                    continue
+
         for offset in range(-context, context + 1):
             pos = index + offset
             if 0 <= pos < len(messages):
                 hit_indexes.add(pos)
 
     return [messages[index] for index in sorted(hit_indexes)]
+
+
+def member_incoming_stats(
+    messages: list[dict[str, Any]],
+    *,
+    victim_ids: set[str],
+    victim_names: dict[str, str],
+) -> dict[str, dict[str, Any]]:
+    """统计每个发送者对聚焦成员的「围攻」次数（回复/@/提及）。
+
+    Returns:
+        ``{sender_id: {"name": 昵称, "count": 次数}}``，不含受害者自己。
+    """
+    victim_message_ids = {
+        str(message.get("message_id") or "")
+        for message in messages
+        if str(message.get("sender_id") or "") in victim_ids
+    }
+    stats: dict[str, dict[str, Any]] = {}
+    for message in messages:
+        sender = str(message.get("sender_id") or "")
+        if not sender or sender in victim_ids:
+            continue
+        reply_to = str(message.get("reply_to") or "")
+        text = clean_text(message.get("processed_plain_text") or "", 0)
+        is_reply_to_victim = bool(reply_to) and reply_to in victim_message_ids
+        mentions_victim = any(
+            name and name in text for name in victim_names.values()
+        )
+        if not (is_reply_to_victim or mentions_victim):
+            continue
+        entry = stats.setdefault(
+            sender, {"name": clean_text(message.get("sender_name") or sender, 24), "count": 0}
+        )
+        entry["count"] += 1
+    return stats

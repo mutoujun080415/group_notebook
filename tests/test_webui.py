@@ -300,7 +300,7 @@ class TestDossierEndpointRegression:
         """
         class _Service(_FakeService):
             async def generate_dossier(self, stream_id, week_monday="", *, room_name="",
-                                       members=None, force=False):
+                                       members=None, direction="", force=False):
                 return True, "案底已生成", None
 
         app = create_app(_plugin(notebook_service=_Service()))
@@ -316,7 +316,7 @@ class TestDossierEndpointRegression:
     def test_generate_dossier_send_path(self, client, cover_tmp):
         class _Service(_FakeService):
             async def send_dossier(self, stream_id, week_monday="", *, room_name="",
-                                   members=None, regenerate=False):
+                                   members=None, direction="", regenerate=False):
                 return True, "案底已发出"
 
         app = create_app(_plugin(notebook_service=_Service()))

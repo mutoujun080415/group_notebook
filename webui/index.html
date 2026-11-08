@@ -147,6 +147,18 @@
   .cover-controls .range { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
   .cover-controls input[type="range"] { flex: 1; }
 
+  /* 案底方向切换 */
+  .dir-toggle { display: flex; gap: 8px; flex-wrap: wrap; }
+  .dir-toggle button {
+    border: 1.5px solid var(--line); background: #fffaf2; border-radius: 10px;
+    padding: 8px 16px; font: inherit; font-size: 13px; font-weight: 600;
+    color: var(--body); cursor: pointer;
+  }
+  .dir-toggle button[data-active="true"] {
+    border-color: var(--seal); background: var(--seal-soft); color: var(--seal);
+  }
+  .dir-desc b { color: var(--seal); }
+
   /* 案底成员选择器 */
   .member-list {
     display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0 2px; max-height: 180px; overflow-y: auto;
@@ -236,12 +248,24 @@
   <!-- 区块③ 专题案底 -->
   <section class="panel">
     <div class="panel-head">
-      <h2><span class="panel-tag seal">案底</span>迫害记录簿</h2>
-      <span class="muted">聚焦成员，把这一周对 bot 的「罪行」单独立卷示众（独立一张图）</span>
+      <h2><span class="panel-tag seal">案底</span>专题案底卷宗</h2>
+      <span class="muted">独立一张图示众，不并入周记</span>
     </div>
     <div class="controls">
       <div class="field" style="flex: 1 1 100%;">
-        <label>聚焦成员（点选；不选则自动聚焦与 bot 互动最多的 Top 3）</label>
+        <label>卷宗方向（二选一，含义不同）</label>
+        <div class="dir-toggle">
+          <button type="button" id="dir-culprit" data-active="true"
+                  title="统计选中成员对 bot 做了什么：主犯=选中的成员，受害者=bot">成员 → 迫害 bot</button>
+          <button type="button" id="dir-victim"
+                  title="统计全群（含 bot）对选中成员做了什么：受害者=选中的成员，主犯=动手的人">成员 ← 被全群围攻</button>
+        </div>
+        <span class="muted" id="dir-desc">
+          当前方向：选中的成员是<b>主犯</b>，卷宗记录他们迫害 bot 的案件。
+        </span>
+      </div>
+      <div class="field" style="flex: 1 1 100%;">
+        <label>聚焦成员（点选；不选则按当前方向自动聚焦 Top 3）</label>
         <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
           <button class="btn ghost" id="btn-load-members" type="button">加载成员列表</button>
           <span class="muted" id="members-meta">先在日报区选好群与日期，再点加载</span>
@@ -324,7 +348,65 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const state = { groups: [], reports: [], activeKey: null, busy: false, objectUrl: null,
-                filter: 'all', members: [], picked: [] };
+                filter: 'all', members: [], picked: [], direction: 'member_as_culprit' };
+
+const DIRECTION_META = {
+  member_as_culprit: {
+    desc: '当前方向：选中的成员是<b>主犯</b>，卷宗记录他们迫害 bot 的案件。',
+    countLabel: (count) => '迫害 bot ' + count + ' 次',
+    sortKey: (member) => member.out_count,
+    emptyHint: '这一周还没有成员与 bot 互动（按迫害方向统计）。',
+  },
+  member_as_victim: {
+    desc: '当前方向：选中的成员是<b>受害者</b>，卷宗记录全群（含 bot）围攻他们的案件。',
+    countLabel: (count) => '被围攻 ' + count + ' 次',
+    sortKey: (member) => member.in_count,
+    emptyHint: '这一周还没有成员被围攻（按被围攻方向统计）。',
+  },
+};
+
+function setDirection(direction) {
+  state.direction = direction;
+  $('dir-culprit').dataset.active = String(direction === 'member_as_culprit');
+  $('dir-victim').dataset.active = String(direction === 'member_as_victim');
+  $('dir-desc').innerHTML = DIRECTION_META[direction].desc;
+  if (state.members.length) renderMemberList();
+}
+
+function renderMemberList() {
+  const meta = DIRECTION_META[state.direction];
+  const box = $('member-list');
+  box.innerHTML = '';
+  const sorted = state.members.slice().sort((a, b) => meta.sortKey(b) - meta.sortKey(a));
+  state.picked = sorted.slice(0, 3).map((member) => member.qq);
+  if (!sorted.length) {
+    box.innerHTML = '<span class="muted">' + meta.emptyHint + '</span>';
+    return;
+  }
+  sorted.forEach((member, index) => {
+    const chip = document.createElement('span');
+    chip.className = 'member-chip';
+    chip.dataset.active = String(state.picked.includes(member.qq));
+    const av = document.createElement('span');
+    av.className = 'm-av';
+    av.style.background = 'hsl(' + (index * 47 % 360) + ' 45% 55%)';
+    av.textContent = (member.name || '?').slice(0, 1);
+    const name = document.createElement('span');
+    name.textContent = member.name;
+    const count = document.createElement('span');
+    count.className = 'm-count';
+    count.textContent = meta.countLabel(state.direction === 'member_as_culprit'
+                                        ? member.out_count : member.in_count);
+    chip.append(av, name, count);
+    chip.addEventListener('click', () => {
+      const picked = state.picked.includes(member.qq);
+      if (picked) state.picked = state.picked.filter((qq) => qq !== member.qq);
+      else state.picked.push(member.qq);
+      chip.dataset.active = String(!picked);
+    });
+    box.appendChild(chip);
+  });
+}
 
 let toastTimer = null;
 function toast(message, tone = 'info') {
@@ -616,37 +698,9 @@ async function loadMembers() {
     const data = (await api('api/members?group_id=' + encodeURIComponent(groupId)
                             + '&date=' + encodeURIComponent(day))) || {};
     state.members = data.members || [];
-    state.picked = state.members.slice(0, 3).map((member) => member.qq);
-    $('members-meta').textContent = data.week + ' 当周 · 共 ' + state.members.length
-      + ' 名与 bot 有互动的成员（默认勾选互动前 3）';
-    const box = $('member-list');
-    box.innerHTML = '';
-    if (!state.members.length) {
-      box.innerHTML = '<span class="muted">这一周还没有成员与 bot 互动。</span>';
-      return;
-    }
-    state.members.forEach((member, index) => {
-      const chip = document.createElement('span');
-      chip.className = 'member-chip';
-      chip.dataset.active = String(state.picked.includes(member.qq));
-      const av = document.createElement('span');
-      av.className = 'm-av';
-      av.style.background = 'hsl(' + (index * 47 % 360) + ' 45% 55%)';
-      av.textContent = (member.name || '?').slice(0, 1);
-      const name = document.createElement('span');
-      name.textContent = member.name;
-      const count = document.createElement('span');
-      count.className = 'm-count';
-      count.textContent = '互动 ' + member.count + ' 次';
-      chip.append(av, name, count);
-      chip.addEventListener('click', () => {
-        const picked = state.picked.includes(member.qq);
-        if (picked) state.picked = state.picked.filter((qq) => qq !== member.qq);
-        else state.picked.push(member.qq);
-        chip.dataset.active = String(!picked);
-      });
-      box.appendChild(chip);
-    });
+    $('members-meta').textContent = data.week + ' 当周 · 共 ' + state.members.length + ' 名活跃成员';
+    $('member-list').hidden = false;
+    renderMemberList();
   } catch (error) {
     $('member-list').innerHTML = '<span class="muted">加载失败：' + error.message + '</span>';
     $('members-meta').textContent = '加载失败';
@@ -673,6 +727,7 @@ async function generateDossier(send) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ group_id: groupId, date: day,
+                             direction: state.direction,
                              members: state.picked, send: send }),
     })) || {};
     setHint('hint-dossier', data.message || '案底完成', data.ok ? 'ok' : 'error');

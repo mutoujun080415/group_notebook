@@ -28,6 +28,8 @@ from .collector import (
     fetch_day_messages,
     fetch_range_messages,
     member_bot_stats,
+    member_incoming_stats,
+    member_target_stats,
     monday_of,
     resolve_timezone,
     sample_messages,
@@ -41,7 +43,7 @@ from .reports import ReportEntry, list_reports, slug_for_stream
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.5.1"
+_VERSION = "0.6.0"
 
 
 class NotebookService(BaseService):
@@ -523,12 +525,17 @@ class NotebookService(BaseService):
         """案底专题名。"""
         return (self._config().dossier.title or "迫害记录簿").strip()
 
-    def focus_word(self) -> str:
-        """筛选焦点描述：留空自动「迫害{bot_name}」。"""
+    def focus_word(self, direction: str = "member_as_culprit",
+                   victim_display: str = "") -> str:
+        """筛选焦点描述：按方向给默认值。"""
         cfg = self._config()
         focus = (cfg.dossier.focus_word or "").strip()
+        if focus:
+            return focus
         bot_name = (cfg.notebook.bot_name or "").strip() or "本bot"
-        return focus or f"迫害{bot_name}"
+        if direction == "member_as_victim" and victim_display:
+            return f"围攻{victim_display}"
+        return f"迫害{bot_name}"
 
     def case_number(self, monday: str) -> str:
         """案卷编号：MOFOX-<年>-W<ISO 周序号>。"""
@@ -542,6 +549,15 @@ class NotebookService(BaseService):
         """案底产物路径（PNG/JSON/HTML），kind=dossier。"""
         return self.report_paths(stream_id, monday, kind="dossier")
 
+    def member_name(self, messages: list[dict[str, Any]], member_id: str) -> str:
+        """从消息列表里解析成员当前昵称。"""
+        from .models import clean_text
+
+        for message in messages:
+            if str(message.get("sender_id") or "") == member_id:
+                return clean_text(message.get("sender_name") or member_id, 24)
+        return member_id
+
     async def generate_dossier(
         self,
         stream_id: str,
@@ -549,14 +565,21 @@ class NotebookService(BaseService):
         *,
         room_name: str = "",
         members: list[str] | None = None,
+        direction: str = "",
         force: bool = False,
     ) -> tuple[bool, str, Path | None]:
         """生成指定周的案件卷宗（聚焦成员留空走自动 Top N）。
 
         Args:
-            members: 聚焦成员的 QQ 号列表；为空时自动取与 bot 互动最多的 Top N。
+            members: 聚焦成员的 QQ 号列表；为空时自动取方向榜 Top N。
+            direction: ``member_as_culprit``（成员迫害 bot）/ ``member_as_victim``
+                （成员被围攻）；留空用配置默认。
         """
         config = self._config()
+        direction = (direction or config.dossier.default_direction or
+                     "member_as_culprit").strip()
+        if direction not in {"member_as_culprit", "member_as_victim"}:
+            direction = "member_as_culprit"
         monday, _sunday, period_text = self.normalize_week(week_monday)
         png_path, json_path, html_path = self.dossier_paths(stream_id, monday)
         if png_path.exists() and not force:
@@ -582,42 +605,85 @@ class NotebookService(BaseService):
             if not bot_ids:
                 return False, "本周没有发现 bot 的发言记录，无法认定受害者", None
 
-            member_stats = member_bot_stats(
-                human_messages + bot_messages, bot_ids=bot_ids,
-                bot_name=config.notebook.bot_name,
-            )
-            focus_ids = [str(m).strip() for m in (members or []) if str(m).strip()]
-            if focus_ids:
-                known_ids = set(member_stats)
-                missing = [mid for mid in focus_ids if mid not in known_ids]
-                if missing:
-                    return False, (
-                        f"这些成员本周与{config.notebook.bot_name}没有互动记录："
-                        + "、".join(missing)
-                    ), None
-                focus_ids = [mid for mid in focus_ids if mid in known_ids]
-            else:
-                focus_ids = [
-                    sender for sender, _info in sorted(
-                        member_stats.items(), key=lambda item: item[1]["count"],
-                        reverse=True,
-                    )[: max(1, int(config.dossier.top_members))]
+            if direction == "member_as_victim":
+                # 成员被围攻：受害者=聚焦成员（留空=被指向最多的 Top N）
+                target_stats = member_target_stats(messages)
+                if members:
+                    focus_ids = [str(m).strip() for m in members if str(m).strip()]
+                    missing = [mid for mid in focus_ids if mid not in target_stats]
+                    if missing:
+                        return False, (
+                            "这些成员本周没有被指向的记录或不存在："
+                            + "、".join(missing)
+                        ), None
+                else:
+                    focus_ids = [
+                        victim for victim, _info in sorted(
+                            target_stats.items(), key=lambda item: item[1]["count"],
+                            reverse=True,
+                        )[: max(1, int(config.dossier.top_members))]
+                    ]
+                victim_names = {
+                    mid: self.member_name(messages, mid) for mid in focus_ids
+                }
+                culprit_stats = [
+                    {"name": info["name"], "count": info["count"]}
+                    for _mid, info in sorted(
+                        member_incoming_stats(
+                            messages, victim_ids=set(focus_ids),
+                            victim_names=victim_names,
+                        ).items(), key=lambda item: item[1]["count"], reverse=True,
+                    )[: max(1, int(config.dossier.top_members) * 2)]
                 ]
-
-            culprit_stats = [
-                {"name": member_stats[mid]["name"], "count": member_stats[mid]["count"]}
-                for mid in focus_ids
-            ]
-            pool = collect_dossier_pool(
-                messages, bot_ids=bot_ids,
-                bot_name=config.notebook.bot_name,
-                focus_members=focus_ids,
-            )
+                victim_display = "、".join(victim_names[mid] for mid in focus_ids)
+                pool = collect_dossier_pool(
+                    messages, bot_ids=bot_ids,
+                    bot_name=config.notebook.bot_name,
+                    direction="member_as_victim",
+                    focus_members=focus_ids,
+                    victim_names=victim_names,
+                )
+            else:
+                # 成员迫害 bot：受害者=bot，主犯=聚焦成员（留空=互动 Top N）
+                member_stats = member_bot_stats(
+                    human_messages + bot_messages, bot_ids=bot_ids,
+                    bot_name=config.notebook.bot_name,
+                )
+                focus_ids = [str(m).strip() for m in (members or []) if str(m).strip()]
+                if focus_ids:
+                    known_ids = set(member_stats)
+                    missing = [mid for mid in focus_ids if mid not in known_ids]
+                    if missing:
+                        return False, (
+                            f"这些成员本周与{config.notebook.bot_name}没有互动记录："
+                            + "、".join(missing)
+                        ), None
+                else:
+                    focus_ids = [
+                        sender for sender, _info in sorted(
+                            member_stats.items(), key=lambda item: item[1]["count"],
+                            reverse=True,
+                        )[: max(1, int(config.dossier.top_members))]
+                    ]
+                culprit_stats = [
+                    {"name": member_stats[mid]["name"], "count": member_stats[mid]["count"]}
+                    for mid in focus_ids
+                ]
+                victim_display = config.notebook.bot_name
+                pool = collect_dossier_pool(
+                    messages, bot_ids=bot_ids,
+                    bot_name=config.notebook.bot_name,
+                    direction="member_as_culprit",
+                    focus_members=focus_ids,
+                )
             if not pool:
                 return False, "候选池为空：这一周大家都很乖，没有可立案的记录", None
 
             case_no = self.case_number(monday)
-            focus_word = self.focus_word()
+            focus_word = (
+                self.focus_word(direction, victim_display)
+                if direction == "member_as_victim" else self.focus_word(direction)
+            )
             dossier = await analyze_dossier(
                 report_date=monday,
                 room_name=self.room_name_for(stream_id, room_name),
@@ -631,6 +697,8 @@ class NotebookService(BaseService):
                 max_cases=max(1, int(config.dossier.max_cases)),
                 top_members=max(1, int(config.dossier.top_members)),
                 config=config,
+                direction=direction,
+                victim_display=victim_display,
             )
             try:
                 engine_used = await self._render_dossier(dossier, png_path, html_path)
@@ -646,8 +714,8 @@ class NotebookService(BaseService):
                 return False, f"案底保存失败：{exc}", None
             self._cleanup_old_reports()
             logger.info(
-                f"群聊案底已生成：{png_path}（引擎 {engine_used}，来源 {dossier.source}，"
-                f"案件 {len(dossier.cases)} 起）"
+                f"群聊案底已生成：{png_path}（引擎 {engine_used}，方向 {direction}，"
+                f"来源 {dossier.source}，案件 {len(dossier.cases)} 起）"
             )
             message = (
                 f"{monday} 当周的案底已生成（{len(dossier.cases)} 起案件，{engine_used} 引擎）"
@@ -663,6 +731,7 @@ class NotebookService(BaseService):
         *,
         room_name: str = "",
         members: list[str] | None = None,
+        direction: str = "",
         regenerate: bool = False,
     ) -> tuple[bool, str]:
         """生成（或复用已有）案底并发送到聊天流。"""
@@ -672,7 +741,7 @@ class NotebookService(BaseService):
         if regenerate or not png_path.exists():
             ok, message, path = await self.generate_dossier(
                 stream_id, monday, room_name=room_name,
-                members=members, force=regenerate,
+                members=members, direction=direction, force=regenerate,
             )
             if not ok or path is None:
                 return False, message

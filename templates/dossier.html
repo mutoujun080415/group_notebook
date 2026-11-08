@@ -231,7 +231,7 @@
     <div class="title-block">
       <div class="titles">
         <h1>{{ page_title }}</h1>
-        <p class="focus-line">专题焦点：<strong>{{ focus_word }}</strong>　·　受害者：{{ bot_name }}</p>
+        <p class="focus-line">方向：{{ '成员迫害 bot' if direction == 'member_as_culprit' else '成员被全群围攻' }}　·　专题焦点：<strong>{{ focus_word }}</strong>　·　受害者：{{ victim_display or bot_name }}</p>
       </div>
       <div class="stamp">
         <span class="stamp-main">已立案<br>示众</span>
@@ -290,7 +290,7 @@
         {% for name in case.culprits %}
         <span class="c-chip"><span class="c-mini" style="background: {{ case.color }}">{{ name[:1] }}</span>{{ name }}</span>
         {% endfor %}
-        <span class="c-label">对 {{ case.victim }} 实施了{{ focus_word }}</span>
+        <span class="c-label">{{ case.culprits | join('、') }} 对 {{ case.victim }} 实施了{{ focus_word }}</span>
       </div>
       <p class="case-summary">{{ case.summary_html | safe }}</p>
       <div class="case-note">

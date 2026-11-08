@@ -361,6 +361,48 @@ def member_target_stats(
     return victim_counts
 
 
+def member_interaction_stats(
+    messages: list[dict[str, Any]],
+    *,
+    member_ids: set[str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """统计每个成员对其他成员的互动次数（回复他人 / @或提及他人）。
+
+    Args:
+        member_ids: 只统计这些成员；为空统计全部。
+
+    Returns:
+        ``{member_id: {"name": 昵称, "count": 对他人互动次数}}``。
+    """
+    id_to_name: dict[str, str] = {}
+    for message in messages:
+        sender = str(message.get("sender_id") or "")
+        if sender:
+            id_to_name.setdefault(sender, clean_text(message.get("sender_name") or sender, 24))
+    name_to_id = {name: sender for sender, name in id_to_name.items() if len(name) >= 2}
+
+    counts: dict[str, dict[str, Any]] = {}
+    for message in messages:
+        sender = str(message.get("sender_id") or "")
+        if member_ids is not None and sender not in member_ids:
+            continue
+        text = clean_text(message.get("processed_plain_text") or "", 0)
+        reply_to = str(message.get("reply_to") or "")
+        targets: set[str] = set()
+        if reply_to and reply_to in id_to_name and reply_to != sender:
+            targets.add(reply_to)
+        for name, member_id in name_to_id.items():
+            if member_id != sender and name and name in text:
+                targets.add(member_id)
+        if not targets:
+            continue
+        entry = counts.setdefault(
+            sender, {"name": id_to_name.get(sender, sender), "count": 0}
+        )
+        entry["count"] += 1
+    return counts
+
+
 def member_bot_stats(
     messages: list[dict[str, Any]],
     *,
@@ -424,6 +466,11 @@ def collect_dossier_pool(
         str(message.get("message_id") or ""): index
         for index, message in enumerate(messages)
     }
+    id_to_name: dict[str, str] = {}
+    for message in messages:
+        sender = str(message.get("sender_id") or "")
+        if sender:
+            id_to_name.setdefault(sender, clean_text(message.get("sender_name") or sender, 24))
     focus_set = {str(member).strip() for member in (focus_members or []) if str(member).strip()}
 
     def _sender_of(index_or_id: Any) -> str:
@@ -451,16 +498,18 @@ def collect_dossier_pool(
             is_reply_to_victim = bool(reply_to) and _sender_of(reply_to) in focus_set
             if not (is_targeting or is_reply_to_victim):
                 continue
-        else:
-            # 迫害方向：命中 = 消息指向 bot（回复 bot / @bot / 提及 bot）
-            sender_is_bot = sender in bot_ids
-            is_reply_to_bot = bool(reply_to) and reply_to in bot_message_ids
-            mentions_bot = bool(bot_name) and bot_name in text
-            if not (sender_is_bot or is_reply_to_bot or mentions_bot):
+        elif direction == "member_as_culprit":
+            # 加害方向：命中 = 聚焦成员对「其他人」（群友或各 bot）的互动消息
+            if focus_set and sender not in focus_set:
                 continue
-            if focus_set:
-                if not focus_set.intersection({sender, replied_sender}):
-                    continue
+            is_reply_to_other = bool(reply_to) and _sender_of(reply_to) not in (sender,)
+            mentions_other = any(
+                name and name in text
+                for member_id, name in id_to_name.items()
+                if member_id != sender
+            )
+            if not (is_reply_to_other or mentions_other):
+                continue
 
         for offset in range(-context, context + 1):
             pos = index + offset

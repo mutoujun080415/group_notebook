@@ -29,6 +29,7 @@ from .collector import (
     fetch_range_messages,
     member_bot_stats,
     member_incoming_stats,
+    member_interaction_stats,
     member_target_stats,
     monday_of,
     resolve_timezone,
@@ -43,7 +44,7 @@ from .reports import ReportEntry, list_reports, slug_for_stream
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.6.0"
+_VERSION = "0.6.1"
 
 
 class NotebookService(BaseService):
@@ -549,6 +550,15 @@ class NotebookService(BaseService):
         """案底产物路径（PNG/JSON/HTML），kind=dossier。"""
         return self.report_paths(stream_id, monday, kind="dossier")
 
+    @staticmethod
+    def member_name_of(messages: list[dict[str, Any]], member_id: str) -> str:
+        from .models import clean_text
+
+        for message in messages:
+            if str(message.get("sender_id") or "") == member_id:
+                return clean_text(message.get("sender_name") or member_id, 24)
+        return member_id
+
     def member_name(self, messages: list[dict[str, Any]], member_id: str) -> str:
         """从消息列表里解析成员当前昵称。"""
         from .models import clean_text
@@ -605,6 +615,11 @@ class NotebookService(BaseService):
             if not bot_ids:
                 return False, "本周没有发现 bot 的发言记录，无法认定受害者", None
 
+            all_member_ids = {
+                str(message.get("sender_id") or "")
+                for message in messages
+                if str(message.get("sender_id") or "")
+            }
             if direction == "member_as_victim":
                 # 成员被围攻：受害者=聚焦成员（留空=被指向最多的 Top N）
                 target_stats = member_target_stats(messages)
@@ -644,32 +659,28 @@ class NotebookService(BaseService):
                     victim_names=victim_names,
                 )
             else:
-                # 成员迫害 bot：受害者=bot，主犯=聚焦成员（留空=互动 Top N）
-                member_stats = member_bot_stats(
-                    human_messages + bot_messages, bot_ids=bot_ids,
-                    bot_name=config.notebook.bot_name,
+                # 成员迫害其他成员：主犯=聚焦成员（留空=对他人互动 Top N），
+                # 受害者逐案标注（其他群友或各 bot 都算）
+                interact_stats = member_interaction_stats(
+                    messages, member_ids=(
+                        {str(m).strip() for m in members if str(m).strip()}
+                        if members else None
+                    )
                 )
-                focus_ids = [str(m).strip() for m in (members or []) if str(m).strip()]
-                if focus_ids:
-                    known_ids = set(member_stats)
-                    missing = [mid for mid in focus_ids if mid not in known_ids]
-                    if missing:
-                        return False, (
-                            f"这些成员本周与{config.notebook.bot_name}没有互动记录："
-                            + "、".join(missing)
-                        ), None
-                else:
-                    focus_ids = [
-                        sender for sender, _info in sorted(
-                            member_stats.items(), key=lambda item: item[1]["count"],
-                            reverse=True,
-                        )[: max(1, int(config.dossier.top_members))]
-                    ]
+                focus_ids = [
+                    sender for sender, _info in sorted(
+                        interact_stats.items(), key=lambda item: item[1]["count"],
+                        reverse=True,
+                    )[: max(1, int(config.dossier.top_members))]
+                ]
+                if not focus_ids:
+                    return False, "这一周没有找到聚焦成员的互动记录", None
                 culprit_stats = [
-                    {"name": member_stats[mid]["name"], "count": member_stats[mid]["count"]}
+                    {"name": self.member_name_of(messages, mid),
+                     "count": interact_stats[mid]["count"]}
                     for mid in focus_ids
                 ]
-                victim_display = config.notebook.bot_name
+                victim_display = ""
                 pool = collect_dossier_pool(
                     messages, bot_ids=bot_ids,
                     bot_name=config.notebook.bot_name,

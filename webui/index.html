@@ -256,9 +256,9 @@
         <label>卷宗方向（二选一，含义不同）</label>
         <div class="dir-toggle">
           <button type="button" id="dir-culprit" data-active="true"
-                  title="统计选中成员对 bot 做了什么：主犯=选中的成员，受害者=bot">成员 → 迫害 bot</button>
+                  title="统计选中成员对其他人（群友/各bot）做了什么：主犯=选中的成员，受害者逐案标注">成员 → 迫害其他成员</button>
           <button type="button" id="dir-victim"
-                  title="统计全群（含 bot）对选中成员做了什么：受害者=选中的成员，主犯=动手的人">成员 ← 被全群围攻</button>
+                  title="统计全群（含各bot）对选中成员做了什么：受害者=选中的成员，主犯=动手的人">成员 ← 被全群围攻</button>
         </div>
         <span class="muted" id="dir-desc">
           当前方向：选中的成员是<b>主犯</b>，卷宗记录他们迫害 bot 的案件。
@@ -352,13 +352,13 @@ const state = { groups: [], reports: [], activeKey: null, busy: false, objectUrl
 
 const DIRECTION_META = {
   member_as_culprit: {
-    desc: '当前方向：选中的成员是<b>主犯</b>，卷宗记录他们迫害 bot 的案件。',
-    countLabel: (count) => '迫害 bot ' + count + ' 次',
+    desc: '当前方向：选中的成员是<b>加害方</b>，卷宗记录他们迫害其他成员（含各 bot）的案件，受害者逐案标注。',
+    countLabel: (count) => '对他人输出 ' + count + ' 次',
     sortKey: (member) => member.out_count,
-    emptyHint: '这一周还没有成员与 bot 互动（按迫害方向统计）。',
+    emptyHint: '这一周还没有聚焦成员对其他人的互动记录。',
   },
   member_as_victim: {
-    desc: '当前方向：选中的成员是<b>受害者</b>，卷宗记录全群（含 bot）围攻他们的案件。',
+    desc: '当前方向：选中的成员是<b>受害者</b>，卷宗记录全群（含各 bot）围攻他们的案件。',
     countLabel: (count) => '被围攻 ' + count + ' 次',
     sortKey: (member) => member.in_count,
     emptyHint: '这一周还没有成员被围攻（按被围攻方向统计）。',
@@ -748,6 +748,8 @@ $('btn-refresh').addEventListener('click', () => refresh(false));
 $('btn-generate').addEventListener('click', () => generate(true));
 $('btn-preview').addEventListener('click', () => generate(false));
 $('btn-batch').addEventListener('click', generateBatch);
+$('dir-culprit').addEventListener('click', () => setDirection('member_as_culprit'));
+$('dir-victim').addEventListener('click', () => setDirection('member_as_victim'));
 $('btn-weekly').addEventListener('click', () => generateWeekly(false));
 $('btn-weekly-send').addEventListener('click', () => generateWeekly(true));
 $('btn-load-members').addEventListener('click', loadMembers);

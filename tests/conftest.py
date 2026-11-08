@@ -163,6 +163,32 @@ def _install_src_stub() -> None:
                         pass  # SectionBase.__init__ 已在 build 时完成字段展开
                     setattr(self, key, instance)
 
+    # ---- kernel 替身（plugin.py 顶层会导入调度器与任务管理器） ----
+    src_kernel = module("src.kernel")
+    kernel_concurrency = module("src.kernel.concurrency")
+    kernel_scheduler = module("src.kernel.scheduler")
+    src.kernel = kernel_concurrency.__class__ and _types.ModuleType("src.kernel")
+    sys.modules["src.kernel"] = src_kernel
+    kernel_concurrency.get_task_manager = lambda: None
+    class TriggerType:
+        TIME = "time"
+        EVENT = "event"
+        CUSTOM = "custom"
+    class _StubScheduler:
+        async def create_schedule(self, *args, **kwargs):
+            return "stub"
+        async def remove_schedule(self, *args, **kwargs):
+            return None
+    kernel_scheduler.TriggerType = TriggerType
+    kernel_scheduler.get_unified_scheduler = lambda: _StubScheduler()
+    src.kernel = kernel_scheduler.__class__ and _types.ModuleType("src.kernel")
+    sys.modules["src.kernel"] = _types.ModuleType("src.kernel")
+    sys.modules["src.kernel"].concurrency = kernel_concurrency
+    sys.modules["src.kernel"].scheduler = kernel_scheduler
+    kernel_concurrency.__class__  # noqa: B018
+    src_pkg = sys.modules["src"]
+    src_pkg.kernel = sys.modules["src.kernel"]
+
     base_pkg.BasePlugin = BasePlugin
     base_pkg.BaseService = BaseService
     base_pkg.BaseCommand = BaseCommand

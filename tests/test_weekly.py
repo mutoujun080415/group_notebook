@@ -152,3 +152,20 @@ class TestEngineUnchanged:
     def test_pick_engine_default(self):
         cfg = SimpleNamespace(render_engine="auto", browser_channel="msedge")
         assert pick_engine(cfg) in ("playwright", "pillow")
+
+
+class TestTickSignatures:
+    def test_tick_dispatch_signatures_align(self):
+        """回归：_tick 调用 _tick_daily(now)/_tick_weekly(now)，签名必须接受 now，
+        否则整个定时任务每分钟抛 TypeError（v0.4.1 真机事故）。"""
+        import inspect
+
+        from group_notebook.plugin import GroupNotebookPlugin
+
+        def params_of(name: str) -> list[str]:
+            func = getattr(GroupNotebookPlugin, name)
+            return [p for p in inspect.signature(func).parameters if p != "self"]
+
+        assert params_of("_tick") == []
+        assert params_of("_tick_daily") == ["now"]
+        assert params_of("_tick_weekly") == ["now"]

@@ -195,14 +195,13 @@ class GroupNotebookPlugin(BasePlugin):
         self._save_state()
         logger.info(f"群聊摘录定时投递完成：day={day}，成功 {success_count}/{len(config.general.groups)} 个群")
 
-    async def _tick_weekly(self) -> None:
+    async def _tick_weekly(self, now: datetime) -> None:
         """周报定时投递：到达配置的星期/时刻后，给每个群发当周周记。"""
         config = self._config()
         if not config.general.enabled or not config.general.weekly_auto_send:
             return
         if self.notebook is None:
             self.notebook = NotebookService(self)
-        now = datetime.now()
         if not self.notebook.is_week_due(now):
             return
         monday = self.notebook.current_week_monday(now)

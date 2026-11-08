@@ -19,7 +19,7 @@ from src.app.plugin_system.api.log_api import get_logger
 from src.app.plugin_system.types import ChatStream
 
 from . import cover
-from .collector import today_in_timezone
+from .collector import monday_of, range_days, today_in_timezone
 from .config import GroupNotebookConfig
 from .reports import is_valid_day, report_file, report_url, slug_for_stream
 
@@ -171,6 +171,9 @@ def create_app(plugin: Any) -> FastAPI:
                 "webui_url": f"{base_url}{route_path.rstrip('/')}/" if base_url else "",
                 "latest_url": _report_url(latest["slug"], latest["date"], route_path) if latest else "",
                 "render_engine": cfg.notebook.render_engine,
+                "weekly_auto_send": cfg.general.weekly_auto_send,
+                "weekly_send_day": cfg.general.weekly_send_day,
+                "weekly_send_time": cfg.general.weekly_send_time,
             }
         )
 
@@ -192,12 +195,12 @@ def create_app(plugin: Any) -> FastAPI:
         return _ok(data)
 
     @app.get("/api/image")
-    async def get_image(slug: str, date: str) -> FileResponse:
-        """返回摘录 PNG。"""
+    async def get_image(slug: str, date: str, kind: str = "day") -> FileResponse:
+        """返回摘录 PNG（kind=week 为周记）。"""
         svc = service()
         if svc is None:
             raise HTTPException(status_code=503, detail="摘录服务尚未初始化")
-        path = report_file(svc.data_dir(), slug, date)
+        path = report_file(svc.data_dir(), slug, date, kind=kind)
         if path is None:
             raise HTTPException(status_code=404, detail="摘录不存在")
         return FileResponse(
@@ -265,6 +268,120 @@ def create_app(plugin: Any) -> FastAPI:
         """删除封面，海报回到配置的立绘/默认页眉。"""
         cover.clear()
         return _ok({"exists": False}, message="封面已删除")
+
+    class BatchPayload(BaseModel):
+        group_id: str = Field(default="", description="群号，留空用第一个配置群")
+        date_start: str = Field(default="", description="起始日期 YYYY-MM-DD")
+        date_end: str = Field(default="", description="结束日期 YYYY-MM-DD（含）")
+        regenerate: bool = Field(default=False, description="已有图也重新生成")
+
+    class WeekPayload(BaseModel):
+        group_id: str = Field(default="", description="群号，留空用第一个配置群")
+        date: str = Field(default="", description="该周内任意日期 YYYY-MM-DD，留空为本周")
+        send: bool = Field(default=False, description="生成后是否发群")
+        regenerate: bool = Field(default=False, description="已有图也重新生成")
+
+    def _resolve_group(payload_group: str) -> tuple[dict[str, str], str]:
+        rows = group_rows()
+        if not rows:
+            raise HTTPException(status_code=400, detail="还没有配置群号，先在插件配置里填 general.groups")
+        group_id = payload_group.strip() or rows[0]["group_id"]
+        row = next((item for item in rows if item["group_id"] == group_id), None)
+        if row is None:
+            raise HTTPException(status_code=400, detail=f"群 {group_id} 不在 general.groups 中")
+        return row, group_id
+
+    @app.post("/api/generate_batch")
+    async def generate_batch(payload: BatchPayload) -> dict[str, Any]:
+        """批量生成日期区间内的逐日摘录（只生成不发送，最多 31 天）。"""
+        cfg = config()
+        svc = service()
+        if svc is None:
+            raise HTTPException(status_code=503, detail="摘录服务尚未初始化")
+        row, group_id = _resolve_group(payload.group_id)
+
+        today = today_in_timezone(cfg.general.timezone)
+        start = payload.date_start.strip() or today
+        end = payload.date_end.strip() or start
+        if not is_valid_day(start) or not is_valid_day(end):
+            raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+        days = range_days(start, end)
+        if not days:
+            raise HTTPException(status_code=400, detail="结束日期早于起始日期")
+        days = [day for day in days if day <= today]
+        if not days:
+            raise HTTPException(status_code=400, detail="区间内没有可生成的日期")
+        days = days[:31]
+
+        stream_id = ChatStream.generate_stream_id(cfg.general.platform, group_id=group_id)
+        results = []
+        ok_count = 0
+        for day in days:
+            try:
+                ok, message, _path = await svc.generate(
+                    stream_id, day, room_name=row["name"],
+                    force=payload.regenerate,
+                )
+            except Exception as exc:
+                logger.error(f"批量生成失败：group={group_id} day={day} {exc}", exc_info=True)
+                ok, message = False, f"生成失败：{exc}"
+            results.append({"date": day, "ok": bool(ok), "message": message})
+            if ok:
+                ok_count += 1
+        generated = sum(1 for item in results if item["ok"])
+        return _ok(
+            {
+                "group_id": group_id,
+                "total": len(results),
+                "ok": ok_count,
+                "results": results,
+            },
+            message=f"批量完成：成功生成/复用 {ok_count}/{len(results)} 天",
+        )
+
+    @app.post("/api/generate_week")
+    async def generate_week_endpoint(payload: WeekPayload) -> dict[str, Any]:
+        """生成（可选发送）指定日期所在自然周的手账周记。"""
+        cfg = config()
+        svc = service()
+        if svc is None:
+            raise HTTPException(status_code=503, detail="摘录服务尚未初始化")
+        row, group_id = _resolve_group(payload.group_id)
+
+        anchor = payload.date.strip() or today_in_timezone(cfg.general.timezone)
+        if not is_valid_day(anchor):
+            raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+        today = today_in_timezone(cfg.general.timezone)
+        if anchor > today:
+            raise HTTPException(status_code=400, detail="不能生成未来日期的周记")
+        monday = monday_of(anchor)
+
+        stream_id = ChatStream.generate_stream_id(cfg.general.platform, group_id=group_id)
+        try:
+            if payload.send:
+                ok, message = await svc.send_week(
+                    stream_id, monday, room_name=row["name"],
+                    regenerate=payload.regenerate,
+                )
+            else:
+                ok, message, _path = await svc.generate_week(
+                    stream_id, monday, room_name=row["name"],
+                    force=payload.regenerate,
+                )
+        except Exception as exc:
+            logger.error(f"独立页面生成周记失败：group={group_id} week={monday} {exc}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"周记生成失败：{exc}") from exc
+
+        return _ok(
+            {
+                "ok": bool(ok),
+                "message": message,
+                "week": monday,
+                "group_id": group_id,
+                "url": report_url(row["slug"], monday, kind="week"),
+            },
+            message=message,
+        )
 
     @app.post("/api/generate")
     async def generate(payload: GeneratePayload) -> dict[str, Any]:

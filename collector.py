@@ -41,6 +41,33 @@ def day_bounds(day: str, timezone_name: str) -> tuple[float, float]:
     return start.timestamp(), end.timestamp()
 
 
+def period_bounds(start_day: str, days: int, timezone_name: str) -> tuple[float, float]:
+    """返回从 start_day 起连续 days 天的起止时间戳（左闭右开）。
+
+    end_ts 不会超过当前时刻，因此未结束的周只统计到「现在」。
+    """
+    start_ts, full_end = day_bounds(start_day, timezone_name)
+    end_ts = full_end + (max(1, days) - 1) * 86400
+    now_ts = datetime.now(resolve_timezone(timezone_name)).timestamp()
+    return start_ts, min(end_ts, now_ts)
+
+
+def monday_of(day: str) -> str:
+    """返回给定日期所在自然周（周一为一周之始）的周一日期。"""
+    current = date.fromisoformat(day)
+    return (current - timedelta(days=current.weekday())).isoformat()
+
+
+def range_days(start_day: str, end_day: str) -> list[str]:
+    """返回 [start_day, end_day] 闭区间内的日期列表（YYYY-MM-DD）。"""
+    start = date.fromisoformat(start_day)
+    end = date.fromisoformat(end_day)
+    if end < start:
+        return []
+    return [(start + timedelta(days=offset)).isoformat()
+            for offset in range((end - start).days + 1)]
+
+
 def today_in_timezone(timezone_name: str) -> str:
     """返回指定时区下的今天日期字符串。"""
     tz = resolve_timezone(timezone_name)
@@ -73,9 +100,27 @@ async def fetch_day_messages(
     max_messages: int = 0,
 ) -> list[dict[str, Any]]:
     """读取指定聊天流某一天的全部消息。"""
+    return await fetch_range_messages(
+        stream_id, day, 1, timezone_name,
+        include_bot=include_bot, max_messages=max_messages,
+    )
+
+
+async def fetch_range_messages(
+    stream_id: str,
+    start_day: str,
+    days: int,
+    timezone_name: str,
+    *,
+    include_bot: bool = True,
+    max_messages: int = 0,
+) -> list[dict[str, Any]]:
+    """读取指定聊天流从 start_day 起连续 days 天的全部消息（最多到当前时刻）。"""
     from src.app.plugin_system.api import message_api
 
-    start_ts, end_ts = day_bounds(day, timezone_name)
+    start_ts, end_ts = period_bounds(start_day, days, timezone_name)
+    if end_ts <= start_ts:
+        return []
     messages = await message_api.get_messages_by_time_in_chat(
         stream_id=stream_id,
         start_time=start_ts,

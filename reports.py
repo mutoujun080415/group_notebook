@@ -37,12 +37,13 @@ def is_valid_day(value: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class ReportEntry:
-    """一份已生成摘录的索引信息。"""
+    """一份已生成摘录的索引信息。kind: day=日报 / week=周报。"""
 
     slug: str
     day: str
     size: int
     mtime: float
+    kind: str = "day"
 
     @property
     def mtime_text(self) -> str:
@@ -54,6 +55,7 @@ class ReportEntry:
         return {
             "slug": self.slug,
             "date": self.day,
+            "kind": self.kind,
             "size": self.size,
             "mtime": self.mtime,
             "mtime_text": self.mtime_text,
@@ -61,9 +63,22 @@ class ReportEntry:
         }
 
 
-def report_url(slug: str, day: str, base: str = _DEFAULT_BASE) -> str:
+def report_url(slug: str, day: str, base: str = _DEFAULT_BASE,
+               kind: str = "day") -> str:
     """返回独立页面里可访问的海报地址。"""
-    return f"{base.rstrip('/')}/api/image?slug={slug}&date={day}"
+    return (f"{base.rstrip('/')}/api/image?slug={slug}&date={day}"
+            + (f"&kind={kind}" if kind != "day" else ""))
+
+
+def parse_report_stem(stem: str) -> tuple[str, str] | None:
+    """解析产物文件名：``YYYY-MM-DD`` → day，``week-YYYY-MM-DD`` → week。
+
+    非法命名返回 None。
+    """
+    if stem.startswith("week-"):
+        day = stem[5:]
+        return ("week", day) if is_valid_day(day) else None
+    return ("day", stem) if is_valid_day(stem) else None
 
 
 def report_root(data_dir: Path) -> Path:
@@ -71,16 +86,18 @@ def report_root(data_dir: Path) -> Path:
     return Path(data_dir) / "reports"
 
 
-def report_file(data_dir: Path, slug: str, day: str) -> Path | None:
+def report_file(data_dir: Path, slug: str, day: str,
+                kind: str = "day") -> Path | None:
     """解析一份摘录的 PNG 路径，路径不合法或不存在时返回 None。
 
     路径穿越防护：slug 先重新清洗并比对，再校验 resolve 后仍位于
     产物根目录之内。
     """
     safe_slug = slug_for_stream(slug)
-    if safe_slug != slug or not is_valid_day(day):
+    if safe_slug != slug or not is_valid_day(day) or kind not in ("day", "week"):
         return None
-    path = report_root(data_dir) / safe_slug / f"{day}.png"
+    prefix = "week-" if kind == "week" else ""
+    path = report_root(data_dir) / safe_slug / f"{prefix}{day}.png"
     try:
         resolved = path.resolve()
         resolved.relative_to(report_root(data_dir).resolve())
@@ -96,9 +113,10 @@ def list_reports(data_dir: Path, *, limit: int = 60) -> list[ReportEntry]:
         return []
     entries: list[ReportEntry] = []
     for png in root.glob("*/*.png"):
-        day = png.stem
-        if not is_valid_day(day):
+        parsed = parse_report_stem(png.stem)
+        if parsed is None:
             continue
+        kind, day = parsed
         try:
             stat = png.stat()
         except OSError:
@@ -109,6 +127,7 @@ def list_reports(data_dir: Path, *, limit: int = 60) -> list[ReportEntry]:
                 day=day,
                 size=stat.st_size,
                 mtime=stat.st_mtime,
+                kind=kind,
             )
         )
     entries.sort(key=lambda item: (item.day, item.mtime), reverse=True)

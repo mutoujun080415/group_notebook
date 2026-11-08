@@ -355,12 +355,14 @@ class PillowNotebookRenderer:
         y += 8
 
         # 日期便签（右侧）
-        try:
-            date_obj = _dt.fromisoformat(report.date)
-            date_text = (f"{date_obj.year} 年 {date_obj.month} 月 {date_obj.day} 日"
-                         f" · {_WEEKDAYS[date_obj.weekday()]}")
-        except ValueError:
-            date_text = report.date
+        date_text = report.period_text or report.date
+        if not report.period_text:
+            try:
+                date_obj = _dt.fromisoformat(report.date)
+                date_text = (f"{date_obj.year} 年 {date_obj.month} 月 {date_obj.day} 日"
+                             f" · {_WEEKDAYS[date_obj.weekday()]}")
+            except ValueError:
+                date_text = report.date
         dw = c.tw(date_text, "hand", 13) + 28
         layer = Canvas(self._fonts, dw + 20, 46)
         layer.rr((10, 8, 10 + dw, 40), 4, fill=(*YELLOW, 255),
@@ -864,7 +866,7 @@ class PillowNotebookRenderer:
         gap = 12
         col_w = (CONTENT_W - 24 - gap * 2) // 3
         cols = [
-            (report.page_title, report.date),
+            (report.page_title, report.period_text or report.date),
             (f"group_notebook {plugin_version(self._base)}", f"来源 {report.source}"),
             (notebook.brand_text, "手账 · 摘录 · 聊天天气"),
         ]

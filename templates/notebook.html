@@ -508,7 +508,7 @@
       </div>
       <div class="header-right">
         {% if character.present %}<div class="character"><img src="{{ character.uri }}" style="{{ character.style }}" alt=""></div>{% endif %}
-        <div class="date-badge">{{ date_text }}</div>
+        <div class="date-badge">{% if period_text %}{{ period_text }}{% else %}{{ date_text }}{% endif %}</div>
       </div>
     </div>
   </header>
@@ -690,7 +690,7 @@
   <footer class="footer">
     <div class="footer-card">
       <strong>{{ page_title }}</strong>
-      <span>{{ date_text }}</span>
+      <span>{% if period_text %}{{ period_text }}{% else %}{{ date_text }}{% endif %}</span>
       <span>生成于 {{ generated_at }}</span>
     </div>
     <div class="footer-card">

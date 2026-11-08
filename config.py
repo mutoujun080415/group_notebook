@@ -71,6 +71,21 @@ class GroupNotebookConfig(BaseConfig):
             description="发送图片的超时秒数，超时只报失败不会卡住整个任务",
             label="发送超时",
         )
+        weekly_auto_send: bool = Field(
+            default=False,
+            description="是否在每周指定时间自动生成并发送周记",
+            label="周记自动发送",
+        )
+        weekly_send_day: int = Field(
+            default=6,
+            description="每周自动发送周记的星期：0=周一 … 6=周日",
+            label="周记发送星期",
+        )
+        weekly_send_time: str = Field(
+            default="22:00",
+            description="每周自动发送周记的时间，格式为 HH:MM",
+            label="周记发送时间",
+        )
 
     general: GeneralSection = Field(default_factory=GeneralSection)
 
@@ -158,6 +173,11 @@ class GroupNotebookConfig(BaseConfig):
             default="",
             description="手账主标题；留空时自动使用「{bot_name}的群聊摘录」",
             label="主标题",
+        )
+        weekly_page_title: str = Field(
+            default="",
+            description="周记主标题；留空时自动使用「{bot_name}的群聊周记」",
+            label="周记标题",
         )
         brand_text: str = Field(
             default="GROUP NOTEBOOK",

@@ -235,6 +235,7 @@ class NotebookReport:
     bot_name: str
     page_title: str
     stats: NotebookStats
+    period_text: str = ""
     greeting: str = ""
     topics: list[Topic] = field(default_factory=list)
     recap: str = ""
@@ -254,6 +255,7 @@ class NotebookReport:
             "room_name": self.room_name,
             "bot_name": self.bot_name,
             "page_title": self.page_title,
+            "period_text": self.period_text,
             "stats": self.stats.to_dict(),
             "greeting": self.greeting,
             "topics": [item.to_dict() for item in self.topics],
@@ -291,6 +293,7 @@ class NotebookReport:
             room_name=str(data.get("room_name") or ""),
             bot_name=str(data.get("bot_name") or ""),
             page_title=str(data.get("page_title") or ""),
+            period_text=str(data.get("period_text") or ""),
             stats=NotebookStats.from_dict(data.get("stats") or {}),
             greeting=str(data.get("greeting") or ""),
             topics=[

@@ -19,7 +19,7 @@ from src.app.plugin_system.types import ChatStream
 from src.kernel.concurrency import get_task_manager
 from src.kernel.scheduler import TriggerType, get_unified_scheduler
 
-from .command import NotebookCommand, _parse_permission
+from .command import NotebookCommand, NotebookWeeklyCommand, _parse_permission
 from .config import GroupNotebookConfig
 from .renderer import shutdown_browser
 from .router import NotebookWebUIRouter
@@ -44,6 +44,7 @@ class GroupNotebookPlugin(BasePlugin):
         self._register_task_id: str | None = None
         self._state_path = Path("data") / "group_notebook" / "state.json"
         self._last_sent_day = ""
+        self._last_sent_week = ""
         self._retry_after: datetime | None = None
 
     def _config(self) -> GroupNotebookConfig:
@@ -52,7 +53,7 @@ class GroupNotebookPlugin(BasePlugin):
 
     def get_components(self) -> list[type]:
         """返回插件组件；独立页面由 ``webui.mount_on_main_http`` 决定是否挂载。"""
-        components: list[type] = [NotebookService, NotebookCommand]
+        components: list[type] = [NotebookService, NotebookCommand, NotebookWeeklyCommand]
         if self._config().webui.mount_on_main_http:
             components.append(NotebookWebUIRouter)
         return components
@@ -65,6 +66,8 @@ class GroupNotebookPlugin(BasePlugin):
         self.notebook = NotebookService(self)
         NotebookCommand.permission_level = _parse_permission(config.general.command_permission)
         NotebookCommand.associated_platforms = [config.general.platform]
+        NotebookWeeklyCommand.permission_level = _parse_permission(config.general.command_permission)
+        NotebookWeeklyCommand.associated_platforms = [config.general.platform]
         self._load_state()
 
         if not config.general.enabled:
@@ -132,14 +135,25 @@ class GroupNotebookPlugin(BasePlugin):
     # ------------------------------------------------------------ 定时执行
 
     async def _tick(self) -> None:
-        """每分钟检查一次是否到达发送时间。"""
+        """每分钟检查一次：日报与周报的定时投递。"""
         config = self._config()
-        if not config.general.enabled or not config.general.auto_send:
+        if not config.general.enabled:
             return
         if self.notebook is None:
             self.notebook = NotebookService(self)
 
         now = datetime.now()
+        if config.general.auto_send and config.general.groups:
+            await self._tick_daily(now)
+        await self._tick_weekly(now)
+
+    async def _tick_daily(self, now: datetime) -> None:
+        """日报定时投递。"""
+        config = self._config()
+        if not config.general.auto_send or not config.general.groups:
+            return
+        if self.notebook is None:
+            self.notebook = NotebookService(self)
         if self._retry_after is not None and now < self._retry_after:
             return
         if not self.notebook.is_due(now):
@@ -181,6 +195,47 @@ class GroupNotebookPlugin(BasePlugin):
         self._save_state()
         logger.info(f"群聊摘录定时投递完成：day={day}，成功 {success_count}/{len(config.general.groups)} 个群")
 
+    async def _tick_weekly(self) -> None:
+        """周报定时投递：到达配置的星期/时刻后，给每个群发当周周记。"""
+        config = self._config()
+        if not config.general.enabled or not config.general.weekly_auto_send:
+            return
+        if self.notebook is None:
+            self.notebook = NotebookService(self)
+        now = datetime.now()
+        if not self.notebook.is_week_due(now):
+            return
+        monday = self.notebook.current_week_monday(now)
+        if monday == self._last_sent_week:
+            return
+        names = self.notebook.group_room_names()
+        success_count = 0
+        for raw_group in config.general.groups:
+            group_id = str(raw_group).strip()
+            if not group_id:
+                continue
+            stream_id = ChatStream.generate_stream_id(config.general.platform, group_id=group_id)
+            try:
+                ok, message = await self.notebook.send_week(
+                    stream_id,
+                    monday,
+                    room_name=names.get(group_id, ""),
+                )
+            except Exception as exc:
+                logger.error(f"群聊周记投递异常：group={group_id} week={monday} {exc}", exc_info=True)
+                continue
+            if ok:
+                success_count += 1
+            else:
+                logger.warning(f"群聊周记投递失败：group={group_id} week={monday} {message}")
+
+        if success_count == 0:
+            logger.warning("群聊周记本轮全部失败，下个 tick 重试")
+            return
+        self._last_sent_week = monday
+        self._save_state()
+        logger.info(f"群聊周记定时投递完成：week={monday}，成功 {success_count}/{len(config.general.groups)} 个群")
+
     # ------------------------------------------------------------ 状态持久化
 
     def _load_state(self) -> None:
@@ -189,6 +244,7 @@ class GroupNotebookPlugin(BasePlugin):
             if self._state_path.exists():
                 data = json.loads(self._state_path.read_text(encoding="utf-8"))
                 self._last_sent_day = str(data.get("last_sent_day") or "")
+                self._last_sent_week = str(data.get("last_sent_week") or "")
         except (OSError, json.JSONDecodeError) as exc:
             logger.warning(f"读取群聊摘录状态失败：{exc}")
             self._last_sent_day = ""
@@ -198,7 +254,8 @@ class GroupNotebookPlugin(BasePlugin):
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
             self._state_path.write_text(
-                json.dumps({"last_sent_day": self._last_sent_day}, ensure_ascii=False),
+                json.dumps({"last_sent_day": self._last_sent_day,
+                        "last_sent_week": self._last_sent_week}, ensure_ascii=False),
                 encoding="utf-8",
             )
         except OSError as exc:

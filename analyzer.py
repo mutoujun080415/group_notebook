@@ -279,20 +279,22 @@ def build_prompt(
     transcript: str,
     config: "GroupNotebookConfig",
     member_lines: str,
+    period_word: str = "一天",
 ) -> tuple[str, str]:
     """构造系统提示与用户提示。"""
     analysis = config.analysis
     notebook = config.notebook
     system_prompt = (
         f"你是群「{room_name}」的群聊摘录编辑，机器人叫「{bot_name}」。"
-        "你的工作是把一天的聊天记录整理成一页手账：几个值得夹书签的话题、"
+        f"你的工作是把{period_word}的聊天记录整理成一页手账：几个值得夹书签的话题、"
         "几位群友的侧写、几句抄在页角的金句、一场聊天天气。\n"
         f"{analysis.persona}\n"
         "硬性要求：\n"
         "1. 只输出一个 JSON 对象，不要 Markdown 代码块，不要任何解释文字。\n"
         "2. 人物昵称、金句原话必须来自聊天记录，禁止编造昵称、事件与数字。\n"
         "3. 不评价外貌、身份、地域、政治与隐私；不写人身攻击和引战内容。\n"
-        "4. 写得具体：写谁说了什么、事情怎么拐弯的；不要「大家聊得很开心」这类空话。\n"
+        f"4. 写得具体：写谁说了什么、事情怎么拐弯的；不要「大家聊得很开心」这类空话；"
+        f"评价群友时站在{period_word}的尺度上看他们的整体表现，并带人设口吻的吐槽或感慨。\n"
         "5. 用中文短句，语气像整理手账的人，轻松、具体、不堆形容词、不升华。\n"
         "6. 严格遵守字段长度限制，超长会被截断。\n"
     )
@@ -300,7 +302,7 @@ def build_prompt(
         system_prompt += f"\n额外要求：\n{analysis.custom_prompt.strip()}\n"
 
     user_prompt = (
-        f"日期：{report_date}\n"
+        f"统计周期：{report_date}\n"
         f"统计：消息 {stats.message_count} 条，参与 {stats.member_count} 人，"
         f"有效字数 {stats.char_count}，表情 {stats.emoji_count} 个，"
         f"最活跃时段 {stats.peak_hour:02d}:00（{stats.peak_count} 条）。\n"
@@ -311,11 +313,11 @@ def build_prompt(
         f'  "greeting": "16 字以内，写给群友的翻页招呼，像手账扉页的一句手写小字",\n'
         f'  "topics": [{{"title": "10 字以内，具体到事", "contributors": ["记录里的昵称", 最多 5 个],'
         f' "detail": "80-150 字，讲清这段在聊什么、怎么聊开的；提到具体群友时用 [昵称] 方括号标注，最多 3 处"}}],\n'
-        f'  "recap": "100-160 字，以整理者的视角把今天的聊天内容总结成一段话：先说主要聊了什么、'
+        f'  "recap": "100-160 字，以整理者的视角把{period_word}的聊天内容总结成一段话：先说主要聊了什么、'
         f'事情怎么发展的，再说整体氛围；按时间顺序组织，不要逐条复述话题标题，不要空话",\n'
         f'  "portraits": [{{"name": "记录里的昵称", "title": "6 字以内称号（如 龙王/省流大师/潜水闪烁者）",'
         f' "mbti": "四个大写字母", "tag": "2-4 字标签（如 话痨/夜猫子）",'
-        f' "desc": "40-70 字，先写他今天具体做了什么、说话什么风格，'
+        f' "desc": "40-70 字，先写他这{period_word}具体做了什么、说话什么风格，'
         f'最后必须带一句符合你人设口吻的吐槽/感慨/批注，禁止只罗列统计数字"}}],\n'
         f'  "quotes": [{{"sender": "记录里的昵称", "text": "记录里的原话，可截取但不要改写",'
         f' "comment": "30-60 字，{bot_name} 视角的锐评或补充"}}],\n'
@@ -323,7 +325,7 @@ def build_prompt(
         f' "dimensions": [{{"name": "2-6 字抽象维度（如 就业焦虑/技术考古/无意义水群）",'
         f' "percentage": 整数占比, "comment": "20-50 字，符合人设的锐评"}}],'
         f' "summary": "30-60 字，一页看完的整体总结"}},\n'
-        f'  "coffee": "30-60 字，结合今天聊的内容，给熬夜的群友推荐一杯饮品",\n'
+        f'  "coffee": "30-60 字，结合这{period_word}聊的内容，给熬夜的群友推荐一杯饮品",\n'
         f'  "murmur": "20-40 字，{bot_name} 第一人称的睡前碎碎念"\n'
         "}\n"
         f"数量：topics 恰好 {analysis.topic_count} 条，portraits 最多 {analysis.portrait_count} 条，"
@@ -502,13 +504,14 @@ def _fallback_recap(
     topics: list[Topic],
     messages: list[dict[str, Any]],
     timezone_name: str,
+    period_word: str = "一天",
 ) -> str:
     """在无模型时，用统计与时段桶拼一段整体总结。"""
     night = sum(stats.hourly[0:6]) + sum(stats.hourly[22:24])
     top_name = stats.top_members[0]["name"] if stats.top_members else "群友"
     parts: list[str] = [
-        f"这一天群里共有 {stats.message_count} 条消息、{stats.member_count} 位群友参与，"
-        f"{top_name} 是今天最活跃的人。"
+        f"这{period_word}群里共有 {stats.message_count} 条消息、{stats.member_count} 位群友参与，"
+        f"{top_name} 是最活跃的人。"
     ]
     if topics:
         heads = "、".join(topic.title for topic in topics[:3])
@@ -531,6 +534,8 @@ def build_fallback_report(
     messages: list[dict[str, Any]],
     config: "GroupNotebookConfig",
     reason: str = "",
+    period_word: str = "一天",
+    period_text: str = "",
 ) -> NotebookReport:
     """在无模型或模型失败时生成一份仍然可读的摘录。"""
     analysis = config.analysis
@@ -553,9 +558,11 @@ def build_fallback_report(
         bot_name=bot_name,
         page_title=page_title,
         stats=stats,
+        period_text=period_text,
         greeting=rng.choice(_FALLBACK_GREETINGS),
         topics=fallback_topics,
-        recap=_fallback_recap(stats, fallback_topics, messages, config.general.timezone),
+        recap=_fallback_recap(stats, fallback_topics, messages,
+                              config.general.timezone, period_word),
         portraits=_fallback_portraits(
             messages,
             limit=analysis.portrait_count,
@@ -583,8 +590,14 @@ async def analyze_day(
     messages: list[dict[str, Any]],
     transcript: str,
     config: "GroupNotebookConfig",
+    period_word: str = "一天",
+    period_text: str = "",
 ) -> NotebookReport:
-    """生成摘录文案：优先 LLM，失败时回退规则版。"""
+    """生成摘录文案：优先 LLM，失败时回退规则版。
+
+    period_word: 「一天」/「一周」，影响提示词与回退措辞；
+    period_text: 展示用周期文本（如 2026-11-02 ~ 11-08 · 周记），空为单日。
+    """
     analysis = config.analysis
     notebook = config.notebook
     fallback = build_fallback_report(
@@ -595,6 +608,8 @@ async def analyze_day(
         stats=stats,
         messages=messages,
         config=config,
+        period_word=period_word,
+        period_text=period_text,
     )
     if not transcript.strip():
         return fallback
@@ -608,6 +623,7 @@ async def analyze_day(
         transcript=transcript,
         config=config,
         member_lines=_build_member_lines(stats),
+        period_word=period_word,
     )
     # 模型偶发返回不带 JSON / 被截断的内容，失败就再要一次，仍然不行才退回规则版。
     # 第二次尝试会把聊天记录砍半，避免小模型/慢模型在长提示词上反复超时。
@@ -674,6 +690,7 @@ async def analyze_day(
         bot_name=bot_name,
         page_title=notebook.page_title or page_title,
         stats=stats,
+        period_text=period_text,
         greeting=clamp_text(strip_markup(data.get("greeting")), 20) or fallback.greeting,
         topics=topics,
         recap=clamp_text(strip_markup(data.get("recap")), 220) or fallback.recap,

@@ -160,9 +160,15 @@
       <label for="inp-date">日期</label>
       <input id="inp-date" type="date">
     </div>
+    <div class="field">
+      <label for="inp-date-end">结束日期（批量，可选）</label>
+      <input id="inp-date-end" type="date">
+    </div>
     <div class="field actions">
       <button class="btn primary" id="btn-generate" type="button">生成并发送</button>
       <button class="btn ghost" id="btn-preview" type="button">仅生成</button>
+      <button class="btn ghost" id="btn-batch" type="button">批量补生成</button>
+      <button class="btn ghost" id="btn-weekly" type="button">生成周报</button>
     </div>
     <div class="hint" id="conn-hint"></div>
   </section>
@@ -303,7 +309,7 @@ function renderHistory() {
     row.className = 'row';
     const date = document.createElement('span');
     date.className = 'date';
-    date.textContent = report.date;
+    date.textContent = (report.kind === 'week' ? '【周记】' : '') + report.date;
     const size = document.createElement('span');
     size.className = 'meta';
     size.textContent = fmtSize(report.size);
@@ -330,7 +336,8 @@ async function showReport(report) {
   $('stage-image').hidden = true;
   revokeObjectUrl();
   try {
-    const blob = await api('api/image?slug=' + encodeURIComponent(report.slug) + '&date=' + encodeURIComponent(report.date));
+    const kindParam = report.kind === 'week' ? '&kind=week' : '';
+    const blob = await api('api/image?slug=' + encodeURIComponent(report.slug) + '&date=' + encodeURIComponent(report.date) + kindParam);
     state.objectUrl = URL.createObjectURL(blob);
     $('stage-image').src = state.objectUrl;
     $('stage-image').hidden = false;
@@ -427,6 +434,78 @@ async function generate(send) {
 $('btn-refresh').addEventListener('click', () => refresh(false));
 $('btn-generate').addEventListener('click', () => generate(true));
 $('btn-preview').addEventListener('click', () => generate(false));
+
+async function generateBatch() {
+  if (state.busy) return;
+  const groupId = $('sel-group').value;
+  if (!groupId) { setHint('插件配置里没有群号，先填 general.groups', 'error'); return; }
+  const start = $('inp-date').value;
+  const end = $('inp-date-end').value || start;
+  if (!start || !end) { setHint('先选起始/结束日期', 'error'); return; }
+
+  state.busy = true;
+  $('btn-batch').disabled = true;
+  const started = Date.now();
+  const tick = setInterval(() => {
+    setHint('正在批量生成 ' + start + ' ~ ' + end + ' … ' + Math.round((Date.now() - started) / 1000) + 's');
+  }, 1000);
+  try {
+    const data = (await api('api/generate_batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: groupId, date_start: start, date_end: end }),
+    })) || {};
+    const failed = (data.results || []).filter((item) => !item.ok);
+    setHint('批量完成：成功 ' + data.ok + '/' + data.total + ' 天' +
+            (failed.length ? '；失败：' + failed.map((item) => item.date).join('、') : ''), data.ok ? 'ok' : 'error');
+    toast('批量完成：成功 ' + data.ok + '/' + data.total + ' 天', data.ok ? 'ok' : 'error');
+    await loadState();
+    await loadReports(true);
+  } catch (error) {
+    setHint('批量生成失败：' + error.message, 'error');
+    toast(error.message || '批量生成失败', 'error');
+  } finally {
+    clearInterval(tick);
+    state.busy = false;
+    $('btn-batch').disabled = false;
+  }
+}
+
+async function generateWeekly() {
+  if (state.busy) return;
+  const groupId = $('sel-group').value;
+  if (!groupId) { setHint('插件配置里没有群号，先填 general.groups', 'error'); return; }
+  const day = $('inp-date').value;
+  if (!day) { setHint('先选一个日期（生成它所在的那一周）', 'error'); return; }
+
+  state.busy = true;
+  $('btn-weekly').disabled = true;
+  const started = Date.now();
+  const tick = setInterval(() => {
+    setHint('正在生成周记（' + day + ' 所在周）… ' + Math.round((Date.now() - started) / 1000) + 's');
+  }, 1000);
+  try {
+    const data = (await api('api/generate_week', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: groupId, date: day, send: false }),
+    })) || {};
+    setHint(data.message || '周记完成', data.ok ? 'ok' : 'error');
+    toast(data.message || '周记完成', data.ok ? 'ok' : 'error');
+    await loadState();
+    await loadReports(true);
+  } catch (error) {
+    setHint('周记生成失败：' + error.message, 'error');
+    toast(error.message || '周记生成失败', 'error');
+  } finally {
+    clearInterval(tick);
+    state.busy = false;
+    $('btn-weekly').disabled = false;
+  }
+}
+
+$('btn-batch').addEventListener('click', generateBatch);
+$('btn-weekly').addEventListener('click', generateWeekly);
 
 const now = new Date();
 const pad = (value) => String(value).padStart(2, '0');

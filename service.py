@@ -45,7 +45,7 @@ from .reports import build_stem, is_valid_day, ReportEntry, list_reports, slug_f
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.6.5"
+_VERSION = "0.7.0"
 
 
 class NotebookService(BaseService):

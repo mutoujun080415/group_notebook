@@ -45,7 +45,7 @@ from .reports import build_stem, is_valid_day, ReportEntry, list_reports, slug_f
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.8.0"
+_VERSION = "0.6.4"
 
 
 class NotebookService(BaseService):
@@ -618,8 +618,6 @@ class NotebookService(BaseService):
                 for message in bot_messages
                 if str(message.get("sender_id") or "")
             }
-            if direction == "member_as_culprit" and not bot_ids:
-                return False, "本周没有发现 bot 的发言记录，无法认定受害者", None
 
             all_member_ids = {
                 str(message.get("sender_id") or "")

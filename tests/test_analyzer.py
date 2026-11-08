@@ -185,6 +185,46 @@ class TestFallbackReport:
         assert report.mood.dimensions
         assert report.coffee and report.murmur
 
+    def test_portrait_desc_has_commentary_not_only_stats(self):
+        """回退侧写必须带一句批注，不能只是“出现 N 次，最长一句…”。"""
+        stats = _stats()
+        messages = [
+            {"time": 1793520000.0, "sender_name": "阿鱼",
+             "processed_plain_text": "今天聊了不少内容啊，这一句足够长了"},
+            {"time": 1793520100.0, "sender_name": "阿鱼", "processed_plain_text": "[图片(0b222d7afe)]"},
+            {"time": 1793520200.0, "sender_name": "阿鱼", "processed_plain_text": "哈哈😀"},
+        ]
+        report = build_fallback_report(
+            report_date="2026-11-05",
+            room_name="测试群",
+            bot_name="安安",
+            page_title="测试摘录",
+            stats=stats,
+            messages=messages,
+            config=TEST_CONFIG,
+        )
+        portrait = next(p for p in report.portraits if p.name == "阿鱼")
+        assert "批注" in portrait.desc
+        # 占位符哈希不允许出现在侧写里
+        assert "0b222d" not in portrait.desc
+
+    def test_portrait_placeholder_hash_filtered(self):
+        stats = _stats()
+        messages = [
+            {"time": 1793520000.0, "sender_name": "阿鱼",
+             "processed_plain_text": "正常发言，不是占位符"},
+        ]
+        report = build_fallback_report(
+            report_date="2026-11-05",
+            room_name="群",
+            bot_name="安安",
+            page_title="t",
+            stats=stats,
+            messages=messages,
+            config=TEST_CONFIG,
+        )
+        assert all("0b222" not in p.desc for p in report.portraits)
+
 
 class TestBuildPrompt:
     def test_prompt_contains_schema_and_counts(self):

@@ -14,7 +14,14 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from .collector import pick_quote_candidates, resolve_timezone, split_day_periods
+from src.app.plugin_system.api.log_api import get_logger
+
+from .collector import (
+    local_hour,
+    pick_quote_candidates,
+    resolve_timezone,
+    split_day_periods,
+)
 from .models import (
     Mood,
     MoodDimension,
@@ -25,12 +32,15 @@ from .models import (
     Topic,
     clamp_text,
     clean_text,
+    count_emoji,
     count_visible_chars,
     strip_markup,
 )
 
 if TYPE_CHECKING:
     from .config import GroupNotebookConfig
+
+logger = get_logger("group_notebook")
 
 _CODE_FENCE = re.compile(r"```(?:json)?", re.IGNORECASE)
 
@@ -305,7 +315,8 @@ def build_prompt(
         f'事情怎么发展的，再说整体氛围；按时间顺序组织，不要逐条复述话题标题，不要空话",\n'
         f'  "portraits": [{{"name": "记录里的昵称", "title": "6 字以内称号（如 龙王/省流大师/潜水闪烁者）",'
         f' "mbti": "四个大写字母", "tag": "2-4 字标签（如 话痨/夜猫子）",'
-        f' "desc": "40-70 字，写他今天具体做了什么、说话什么风格"}}],\n'
+        f' "desc": "40-70 字，先写他今天具体做了什么、说话什么风格，'
+        f'最后必须带一句符合你人设口吻的吐槽/感慨/批注，禁止只罗列统计数字"}}],\n'
         f'  "quotes": [{{"sender": "记录里的昵称", "text": "记录里的原话，可截取但不要改写",'
         f' "comment": "30-60 字，{bot_name} 视角的锐评或补充"}}],\n'
         f'  "mood": {{"title": "2-6 字，今天聊天天气的总名", "subtitle": "10-20 字副标",'
@@ -357,40 +368,77 @@ def _build_member_lines(stats: NotebookStats) -> str:
     ) or "- （无）"
 
 
+_FALLBACK_COMMENTS = [
+    "本子批注：存在感很足，下次让他请客奶茶。",
+    "本子批注：翻到他这页就想笑，建议连续刊登。",
+    "本子批注：话不算最多，但每句都在点上。",
+    "本子批注：安静的时候像背景音，开口就是剧情。",
+    "本子批注：这页的气氛，一半是他带起来的。",
+    "本子批注：他要是哪天潜水，群里得冷场十分钟。",
+    "本子批注：吐槽水平稳定发挥，值得回访。",
+    "本子批注：把他的发言裱起来，就是今日份乐子。",
+]
+
+
 def _fallback_portraits(
     messages: list[dict[str, Any]],
     *,
     limit: int,
     room_seed: str,
+    timezone_name: str = "Asia/Shanghai",
 ) -> list[Portrait]:
-    """在无模型时，用发言量与最长消息生成群友侧写。"""
+    """在无模型时，用行为统计（发言量/深夜比/表情包率/最长真实发言）生成带批注的群友侧写。"""
     rng = random.Random(int(hashlib.md5(room_seed.encode("utf-8")).hexdigest(), 16) % (2**32))
-    by_name: dict[str, list[str]] = {}
-    counts: dict[str, int] = {}
+    by_name: dict[str, list[dict[str, Any]]] = {}
     for message in messages:
         name = clean_text(message.get("sender_name") or "", 24)
         if not name:
             continue
         text = clean_text(message.get("processed_plain_text") or "", 0)
-        counts[name] = counts.get(name, 0) + 1
-        if text:
-            by_name.setdefault(name, []).append(text)
+        hour = local_hour(float(message.get("time") or 0), timezone_name)
+        by_name.setdefault(name, []).append(
+            {"text": text, "hour": hour, "emoji": count_emoji(text)}
+        )
 
     portraits: list[Portrait] = []
-    ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)
-    for name, count in ranked[:limit]:
-        texts = by_name.get(name) or []
-        sample = max(texts, key=count_visible_chars) if texts else ""
+    ranked = sorted(
+        by_name.items(), key=lambda item: len(item[1]), reverse=True
+    )
+    for name, items in ranked[:limit]:
+        count = len(items)
+        emoji_count = sum(item["emoji"] for item in items)
+        night_count = sum(1 for item in items if item["hour"] < 6 or item["hour"] >= 22)
+        real_texts = [
+            item["text"] for item in items
+            if item["text"] and item["text"] not in ("[图]", "[表情包]", "[语音]", "[视频]", "[文件]", "[转发]")
+        ]
+        sample = max(real_texts, key=count_visible_chars) if real_texts else ""
+
+        traits: list[str] = []
+        if count:
+            emoji_ratio = emoji_count / count
+            if emoji_ratio >= 0.4:
+                traits.append("表情包是母语")
+            elif emoji_count >= 5:
+                traits.append("斗图从不落下风")
+        if night_count >= max(3, count // 5):
+            traits.append("一到深夜就准时营业")
+        flavor = "、".join(traits)
+
+        parts: list[str] = [f"今天冒泡 {count} 次"]
+        if sample:
+            parts.append(f"最长的一句是「{clamp_text(sample, 36)}」")
+        if flavor:
+            parts.append(flavor)
+        desc = "，".join(parts) + "。"
+        desc += rng.choice(_FALLBACK_COMMENTS)
         portraits.append(
             Portrait(
                 name=name,
                 title=rng.choice(_FALLBACK_TITLES),
                 mbti=rng.choice(_FALLBACK_MBTI),
                 tag=rng.choice(_FALLBACK_TAGS),
-                desc=(
-                    f"今天出现 {count} 次"
-                    + (f"，最长一句是「{clamp_text(sample, 42)}」。" if sample else "，安静得像在潜水。")
-                ),
+                desc=clamp_text(desc, 110),
             )
         )
     return portraits
@@ -512,6 +560,7 @@ def build_fallback_report(
             messages,
             limit=analysis.portrait_count,
             room_seed=f"{room_name}:{report_date}",
+            timezone_name=config.general.timezone,
         ),
         quotes=quotes,
         mood=_fallback_mood(stats),
@@ -561,24 +610,36 @@ async def analyze_day(
         member_lines=_build_member_lines(stats),
     )
     # 模型偶发返回不带 JSON / 被截断的内容，失败就再要一次，仍然不行才退回规则版。
+    # 第二次尝试会把聊天记录砍半，避免小模型/慢模型在长提示词上反复超时。
     data: dict[str, Any] | None = None
     last_error: Exception | None = None
-    timeout = float(getattr(analysis, "llm_timeout_seconds", 120) or 120)
-    for _attempt in range(2):
+    timeout = float(getattr(analysis, "llm_timeout_seconds", 240) or 240)
+    transcript_lines = transcript.splitlines()
+    for attempt in range(2):
+        prompt_for_attempt = user_prompt
+        if attempt == 1 and len(transcript_lines) > 40:
+            half = transcript_lines[len(transcript_lines) // 2 :]
+            prompt_for_attempt = user_prompt.replace(
+                transcript, "\n".join(half)
+            ) if transcript in user_prompt else user_prompt
+            logger.info("LLM 首次尝试失败，已把聊天记录砍半重试")
         try:
             raw = await _request_llm(
-                system_prompt, user_prompt, analysis.model_task, timeout=timeout
+                system_prompt, prompt_for_attempt, analysis.model_task, timeout=timeout
             )
-        except Exception as exc:  # 模型未配置 / 超时 / 限流
+        except Exception as exc:  # 模型未配置 / 超时 / 限流 / 账号问题
             last_error = exc
+            logger.warning(f"LLM 分析失败（第 {attempt + 1} 次）：{type(exc).__name__}: {exc}")
             continue
         data = _split_json(raw)
         if data:
             break
+        logger.warning("LLM 返回内容无法解析为 JSON")
 
     if not data:
         if last_error is not None:
             fallback.source = f"fallback:llm_error:{type(last_error).__name__}"
+            fallback.llm_error = str(last_error)[:200]
         else:
             fallback.source = "fallback:bad_json"
         return fallback

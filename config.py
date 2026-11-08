@@ -80,7 +80,8 @@ class GroupNotebookConfig(BaseConfig):
 
         model_task: str = Field(
             default="utils",
-            description="用于生成摘录文案的模型任务名（config/model.toml 中的 model_tasks）",
+            description="用于生成摘录文案的模型任务名（config/model.toml 中的 model_tasks）；"
+            "小模型跑长提示词容易超时，可换成能力更强/更稳定的任务（如 actor）",
             label="模型任务",
         )
         max_messages: int = Field(
@@ -94,8 +95,8 @@ class GroupNotebookConfig(BaseConfig):
             label="单条截断长度",
         )
         transcript_budget: int = Field(
-            default=24000,
-            description="聊天记录进入提示词的字符预算，防止超出上下文",
+            default=12000,
+            description="聊天记录进入提示词的字符预算；小模型建议 8000-12000，首次失败会自动砍半重试",
             label="提示词预算",
         )
         topic_count: int = Field(
@@ -132,8 +133,8 @@ class GroupNotebookConfig(BaseConfig):
             label="附加提示",
         )
         llm_timeout_seconds: int = Field(
-            default=120,
-            description="单次模型调用的超时秒数；超时会重试一次，再不行走规则回退",
+            default=240,
+            description="单次模型调用的超时秒数；超时会砍半提示词重试一次，再不行走规则回退",
             label="模型超时",
         )
 

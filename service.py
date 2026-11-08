@@ -36,7 +36,7 @@ from .reports import ReportEntry, list_reports, slug_for_stream
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.3.0"
+_VERSION = "0.3.1"
 
 
 class NotebookService(BaseService):
@@ -215,9 +215,15 @@ class NotebookService(BaseService):
             f"群聊摘录已生成：{png_path}（引擎 {engine_used}，来源 {report.source}，"
             f"消息 {stats.message_count} 条）"
         )
-        return True, (
-            f"{day} 的摘录已生成（{stats.message_count} 条消息，{engine_used} 引擎）"
-        ), png_path
+        message = f"{day} 的摘录已生成（{stats.message_count} 条消息，{engine_used} 引擎）"
+        if report.source.startswith("fallback") and report.llm_error:
+            message += (
+                f"；⚠️ 模型调用失败（{report.llm_error}），本次为规则版文案——"
+                "请检查 analysis.model_task 对应的模型服务，或换一个模型任务"
+            )
+        elif report.source.startswith("fallback"):
+            message += "；⚠️ 本次为规则版文案（模型输出不可用）"
+        return True, message, png_path
 
     async def _render_report(self, report: NotebookReport, png_path: Path, html_path: Path) -> str:
         """按配置选择渲染引擎；auto 模式在浏览器不可用/渲染失败时自动回退 Pillow。"""

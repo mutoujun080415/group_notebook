@@ -13,13 +13,41 @@ _EMOJI_RE = re.compile(
     "[" "\U0001f300-\U0001faff" "\U00002600-\U000027bf" "\U0001f000-\U0001f2ff" "\u2b00-\u2bff" "]+"
 )
 _CQ_RE = re.compile(r"\[CQ:[^\]]+\]")
+# 消息占位符：[图片(哈希)]、[表情包(哈希)]、[语音(..)]、[文件(..)]、[转发消息(..)] 等
+_PLACEHOLDER_RE = re.compile(
+    r"\[(图片|表情包|表情|动画表情|语音|视频|文件|转发消息|合并转发|卡片|json|xml|record|face|reply)[^\]]*\]"
+)
+_PLACEHOLDER_TAGS = {
+    "图片": "[图]",
+    "表情包": "[表情包]",
+    "表情": "[表情包]",
+    "动画表情": "[表情包]",
+    "语音": "[语音]",
+    "视频": "[视频]",
+    "文件": "[文件]",
+    "转发消息": "[转发]",
+    "合并转发": "[转发]",
+    "record": "[语音]",
+    "face": "[表情包]",
+}
 _MARKUP_RE = re.compile(r"\*\*(.+?)\*\*")
 _SPACE_RE = re.compile(r"\s+")
 
 
+def _collapse_placeholders(text: str) -> str:
+    """把消息占位符折叠成短标签，避免哈希串污染文案与统计。"""
+
+    def _sub(match: re.Match) -> str:
+        kind = match.group(1)
+        return _PLACEHOLDER_TAGS.get(kind, "")
+
+    return _PLACEHOLDER_RE.sub(_sub, text)
+
+
 def clean_text(text: str, limit: int = 0) -> str:
-    """清洗单条聊天文本：去 CQ 码、压缩空白，并按需截断。"""
+    """清洗单条聊天文本：去 CQ 码、折叠占位符、压缩空白，并按需截断。"""
     value = _CQ_RE.sub("", str(text or ""))
+    value = _collapse_placeholders(value)
     value = value.replace("\u200b", " ").replace("\r", " ").replace("\n", " ")
     value = _SPACE_RE.sub(" ", value).strip()
     if limit > 0 and len(value) > limit:
@@ -42,7 +70,7 @@ def count_emoji(text: str) -> int:
     """统计文本中的 emoji 与常见表情占位数量。"""
     value = str(text or "")
     total = sum(len(match.group(0)) for match in _EMOJI_RE.finditer(value))
-    for token in ("[表情]", "[动画表情]", "[图片表情]"):
+    for token in ("[表情]", "[动画表情]", "[图片表情]", "[表情包]"):
         total += value.count(token)
     return total
 
@@ -216,6 +244,7 @@ class NotebookReport:
     coffee: str = ""
     murmur: str = ""
     source: str = "fallback"
+    llm_error: str = ""
     generated_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -235,6 +264,7 @@ class NotebookReport:
             "coffee": self.coffee,
             "murmur": self.murmur,
             "source": self.source,
+            "llm_error": self.llm_error,
             "generated_at": self.generated_at,
         }
 
@@ -296,5 +326,6 @@ class NotebookReport:
             coffee=str(data.get("coffee") or ""),
             murmur=str(data.get("murmur") or ""),
             source=str(data.get("source") or "fallback"),
+            llm_error=str(data.get("llm_error") or ""),
             generated_at=str(data.get("generated_at") or ""),
         )

@@ -30,6 +30,18 @@ class TestTextTools:
     def test_clean_text_none_safe(self):
         assert clean_text(None) == ""
 
+    def test_clean_text_collapses_placeholders(self):
+        raw = "[图片(0b222d7afe771c346)]看看这张 [表情包(2a51a0a9c2e41a09)] 哈哈"
+        cleaned = clean_text(raw)
+        assert "0b222d" not in cleaned
+        assert "[图]" in cleaned and "[表情包]" in cleaned
+        assert "看看这张" in cleaned and "哈哈" in cleaned
+
+    def test_count_emoji_counts_sticker_tag(self):
+        # 真实管线是先 clean_text 再 count_emoji（compute_stats 的顺序）
+        assert count_emoji(clean_text("[表情包(2a51a0a9c2e41a09)]")) >= 1
+        assert count_emoji(clean_text("哈哈😀")) >= 1
+
     def test_count_visible_chars_ignores_space_and_cq(self):
         assert count_visible_chars("[CQ:face] a b c") == 3
 

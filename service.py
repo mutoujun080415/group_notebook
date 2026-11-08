@@ -45,7 +45,7 @@ from .reports import build_stem, is_valid_day, ReportEntry, list_reports, slug_f
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.6.4"
+_VERSION = "0.6.5"
 
 
 class NotebookService(BaseService):
@@ -528,15 +528,17 @@ class NotebookService(BaseService):
 
     def focus_word(self, direction: str = "member_as_culprit",
                    victim_display: str = "") -> str:
-        """筛选焦点描述：按方向给默认值。"""
+        """筛选焦点描述：按方向给默认值。
+
+        两个方向的默认措辞都不绑定 bot 名——迫害的对象可以是群里任何人（含各 bot）。
+        """
         cfg = self._config()
         focus = (cfg.dossier.focus_word or "").strip()
         if focus:
             return focus
-        bot_name = (cfg.notebook.bot_name or "").strip() or "本bot"
         if direction == "member_as_victim" and victim_display:
             return f"迫害{victim_display}"
-        return f"迫害{bot_name}"
+        return "迫害·调戏·互怼"
 
     def case_number(self, monday: str) -> str:
         """案卷编号：MOFOX-<年>-W<ISO 周序号>。"""

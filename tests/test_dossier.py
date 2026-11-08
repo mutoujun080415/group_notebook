@@ -266,9 +266,9 @@ class TestDirection:
             max_cases=6, top_members=3,
             direction="member_as_victim", victim_display="鹿目圆",
         )
-        assert "受害者是「鹿目圆」" in system_prompt
+        assert "受害者是「鹿目圆」" in system_prompt  # victim 方向应告知 LLM 受害者身份
         assert "可以包括 bot 本bot" in system_prompt
-        assert "受害者：鹿目圆" in user_prompt
+        assert "受害者：逐案标注" in user_prompt
 
     def test_pillow_victim_direction_smoke(self, tmp_path):
         pytest.importorskip("PIL")

@@ -97,7 +97,7 @@ class PillowDossierRenderer:
             ty += 48
         y = max(ty, y + 60) + 8
         direction_text = ("成员迫害 bot" if report.direction == "member_as_culprit"
-                          else "成员被全群围攻")
+                          else "成员被迫害")
         victim_show = report.victim_display or report.bot_name
         focus = (f"方向：{direction_text}　·　专题焦点：{report.focus_word}"
                  f"　·　受害者：{victim_show}")

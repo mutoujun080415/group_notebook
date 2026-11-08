@@ -44,7 +44,7 @@ from .reports import ReportEntry, list_reports, slug_for_stream
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.6.1"
+_VERSION = "0.6.2"
 
 
 class NotebookService(BaseService):
@@ -535,7 +535,7 @@ class NotebookService(BaseService):
             return focus
         bot_name = (cfg.notebook.bot_name or "").strip() or "本bot"
         if direction == "member_as_victim" and victim_display:
-            return f"围攻{victim_display}"
+            return f"迫害{victim_display}"
         return f"迫害{bot_name}"
 
     def case_number(self, monday: str) -> str:
@@ -612,7 +612,7 @@ class NotebookService(BaseService):
                 for message in bot_messages
                 if str(message.get("sender_id") or "")
             }
-            if not bot_ids:
+            if direction == "member_as_culprit" and not bot_ids:
                 return False, "本周没有发现 bot 的发言记录，无法认定受害者", None
 
             all_member_ids = {
@@ -621,7 +621,7 @@ class NotebookService(BaseService):
                 if str(message.get("sender_id") or "")
             }
             if direction == "member_as_victim":
-                # 成员被围攻：受害者=聚焦成员（留空=被指向最多的 Top N）
+                # 成员被迫害：受害者=聚焦成员（留空=被迫害最多的 Top N）
                 target_stats = member_target_stats(messages)
                 if members:
                     focus_ids = [str(m).strip() for m in members if str(m).strip()]

@@ -290,3 +290,58 @@ class TestDirection:
         png = tmp_path / "victim.png"
         width, height = renderer.render(report, png)
         assert width == 750 and height > 800 and png.stat().st_size > 10_000
+
+
+class TestVictimDirectionGuard:
+    def test_victim_direction_without_bot_messages(self, tmp_path, monkeypatch):
+        """回归：被迫害方向不依赖 bot 发言记录，无 bot 消息也能生成（v0.6.1 事故）。"""
+        import asyncio
+        from types import SimpleNamespace
+
+        import group_notebook.service as service_module
+        from group_notebook.models import DossierCase, DossierCulprit, DossierReport
+        from group_notebook.service import NotebookService
+
+        monkeypatch.chdir(tmp_path)
+        messages = [
+            {"message_id": "m0", "time": 999.0, "sender_id": "v1",
+             "sender_name": "鹿目圆", "processed_plain_text": "大家好"},
+            {"message_id": "m1", "time": 1000.0, "sender_id": "u1",
+             "sender_name": "阿鱼", "processed_plain_text": "鹿目圆 你完蛋了"},
+            {"message_id": "m2", "time": 1001.0, "sender_id": "u2",
+             "sender_name": "小别", "processed_plain_text": "鹿目圆 也完蛋了"},
+        ]
+
+        async def fake_fetch(*args, **kwargs):
+            return messages
+
+        async def fake_split(messages):
+            return list(messages), []  # 没有 bot 消息
+
+        async def fake_analyze(**kwargs):
+            return DossierReport(
+                date=kwargs["report_date"], room_name=kwargs["room_name"],
+                bot_name=kwargs["bot_name"], page_title=kwargs["page_title"],
+                period_text=kwargs["period_text"], case_no=kwargs["case_no"],
+                focus_word=kwargs["focus_word"],
+                direction=kwargs["direction"],
+                victim_display=kwargs["victim_display"],
+                intro="陈述", culprits=[DossierCulprit(name="阿鱼", title="主谋", count=1,
+                                                        profile="画像")],
+                cases=[DossierCase(no=1, time="t", culprits=["阿鱼"], victim="鹿目圆",
+                                   summary="经过", comment="批注", level=4)],
+                closing="结案", source="llm", generated_at="t",
+            )
+
+        monkeypatch.setattr(service_module, "fetch_range_messages", fake_fetch)
+        monkeypatch.setattr(service_module, "split_bot_messages", fake_split)
+        monkeypatch.setattr(service_module, "analyze_dossier", fake_analyze)
+
+        config = GroupNotebookConfig()
+        config.notebook.bot_name = "小七"
+        plugin = SimpleNamespace(config=config)
+        svc = NotebookService(plugin)
+        ok, message, path = asyncio.run(svc.generate_dossier(
+            "stream-x", "2026-11-02", direction="member_as_victim"))
+        assert ok, message
+        assert path and path.is_file()

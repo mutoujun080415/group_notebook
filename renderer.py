@@ -521,7 +521,23 @@ class NotebookRenderer:
 
     async def _screenshot(self, html_path: Path, png_path: Path,
                           scale: int, timeout: float) -> tuple[int, int]:
-        """把已写好的 HTML 截成长图（playwright 管线共用）。"""
+        """把已写好的 HTML 截成长图（playwright 管线共用）。
+
+        浏览器实例可能中途失效（驱动管道断开等），失败时整座重开再试一次。
+        """
+        last_error: Exception | None = None
+        for attempt in (1, 2):
+            try:
+                return await self._screenshot_once(html_path, png_path, scale, timeout)
+            except Exception as exc:
+                last_error = exc
+                if attempt == 1:
+                    await shutdown_browser()  # 整座重开，剔除失效实例
+        raise RuntimeError(f"截图失败（已重开浏览器重试）：{last_error}") from last_error
+
+    async def _screenshot_once(self, html_path: Path, png_path: Path,
+                               scale: int, timeout: float) -> tuple[int, int]:
+        """单次截图尝试。"""
         channel = (self._config.notebook.browser_channel or "").strip().lower()
         if channel in {"none", "off", "chromium"}:
             channel = ""

@@ -19,7 +19,14 @@ from src.app.plugin_system.api.log_api import get_logger
 from src.app.plugin_system.types import ChatStream
 
 from . import cover
-from .collector import monday_of, range_days, today_in_timezone
+from .collector import (
+    fetch_range_messages,
+    member_bot_stats,
+    monday_of,
+    range_days,
+    split_bot_messages,
+    today_in_timezone,
+)
 from .config import GroupNotebookConfig
 from .reports import is_valid_day, report_file, report_url, slug_for_stream
 
@@ -103,6 +110,16 @@ class BatchPayload(BaseModel):
     group_id: str = Field(default="", description="群号，留空用第一个配置群")
     date_start: str = Field(default="", description="起始日期 YYYY-MM-DD")
     date_end: str = Field(default="", description="结束日期 YYYY-MM-DD（含）")
+    regenerate: bool = Field(default=False, description="已有图也重新生成")
+
+
+class DossierPayload(BaseModel):
+    """案底生成请求体。"""
+
+    group_id: str = Field(default="", description="群号，留空用第一个配置群")
+    date: str = Field(default="", description="该周内任意日期 YYYY-MM-DD，留空为本周")
+    members: list[str] = Field(default_factory=list, description="聚焦成员 QQ 号列表，留空自动 Top N")
+    send: bool = Field(default=False, description="生成后是否发群")
     regenerate: bool = Field(default=False, description="已有图也重新生成")
 
 
@@ -300,6 +317,92 @@ def create_app(plugin: Any) -> FastAPI:
         if row is None:
             raise HTTPException(status_code=400, detail=f"群 {group_id} 不在 general.groups 中")
         return row, group_id
+
+    @app.get("/api/members")
+    async def get_members(group_id: str = "", date: str = "") -> dict[str, Any]:
+        """返回指定周与 bot 有互动的成员清单（用于案底聚焦选择）。"""
+        cfg = config()
+        svc = service()
+        if svc is None:
+            raise HTTPException(status_code=503, detail="摘录服务尚未初始化")
+        rows = group_rows()
+        if not rows:
+            raise HTTPException(status_code=400, detail="还没有配置群号")
+        group = group_id.strip() or rows[0]["group_id"]
+        row = next((item for item in rows if item["group_id"] == group), None)
+        if row is None:
+            raise HTTPException(status_code=400, detail=f"群 {group} 不在 general.groups 中")
+        anchor = date.strip() or today_in_timezone(cfg.general.timezone)
+        if not is_valid_day(anchor):
+            raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+        monday = monday_of(anchor)
+        stream_id = ChatStream.generate_stream_id(cfg.general.platform, group_id=group)
+        messages = await fetch_range_messages(
+            stream_id, monday, 7, cfg.general.timezone, include_bot=True, max_messages=0,
+        )
+        human, bot_messages = await split_bot_messages(messages)
+        bot_ids = {
+            str(message.get("sender_id") or "")
+            for message in bot_messages if str(message.get("sender_id") or "")
+        }
+        stats = member_bot_stats(
+            human + bot_messages, bot_ids=bot_ids,
+            bot_name=cfg.notebook.bot_name,
+        )
+        members = sorted(stats.items(), key=lambda item: item[1]["count"], reverse=True)
+        return _ok({
+            "week": monday,
+            "members": [
+                {"qq": sender, "name": info["name"], "count": info["count"]}
+                for sender, info in members[:30]
+            ],
+        })
+
+    @app.post("/api/generate_dossier")
+    async def generate_dossier_endpoint(payload: DossierPayload) -> dict[str, Any]:
+        """生成（可选发送）指定周的专题案底卷宗。"""
+        cfg = config()
+        svc = service()
+        if svc is None:
+            raise HTTPException(status_code=503, detail="摘录服务尚未初始化")
+        if not cfg.dossier.enabled:
+            raise HTTPException(status_code=400, detail="案底功能已在配置中关闭（dossier.enabled）")
+        row, group_id = _resolve_group(payload.group_id)
+        anchor = payload.date.strip() or today_in_timezone(cfg.general.timezone)
+        if not is_valid_day(anchor):
+            raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+        today = today_in_timezone(cfg.general.timezone)
+        if anchor > today:
+            raise HTTPException(status_code=400, detail="不能生成未来日期的案底")
+        monday = monday_of(anchor)
+
+        stream_id = ChatStream.generate_stream_id(cfg.general.platform, group_id=group)
+        try:
+            if payload.send:
+                ok, message = await svc.send_dossier(
+                    stream_id, monday, room_name=row["name"],
+                    members=payload.members or None,
+                    regenerate=payload.regenerate,
+                )
+            else:
+                ok, message, _path = await svc.generate_dossier(
+                    stream_id, monday, room_name=row["name"],
+                    members=payload.members or None,
+                    force=payload.regenerate,
+                )
+        except Exception as exc:
+            logger.error(f"独立页面生成案底失败：group={group_id} week={monday} {exc}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"案底生成失败：{exc}") from exc
+        return _ok(
+            {
+                "ok": bool(ok),
+                "message": message,
+                "week": monday,
+                "group_id": group_id,
+                "url": report_url(row["slug"], monday, kind="dossier"),
+            },
+            message=message,
+        )
 
     @app.post("/api/generate_batch")
     async def generate_batch(payload: BatchPayload) -> dict[str, Any]:

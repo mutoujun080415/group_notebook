@@ -321,3 +321,97 @@ def split_day_periods(messages: list[dict[str, Any]], timezone_name: str) -> lis
         for index, items in enumerate(buckets)
         if items
     ]
+
+
+def member_bot_stats(
+    messages: list[dict[str, Any]],
+    *,
+    bot_ids: set[str],
+    bot_name: str,
+) -> dict[str, dict[str, Any]]:
+    """统计每个成员与 bot 的互动次数（回复 bot / @bot / 提及 bot）。
+
+    Returns:
+        ``{sender_id: {"name": 昵称, "count": 互动次数}}``，不含 bot 自己。
+    """
+    bot_message_ids = {
+        str(message.get("message_id") or "")
+        for message in messages
+        if str(message.get("sender_id") or "") in bot_ids
+    }
+    stats: dict[str, dict[str, Any]] = {}
+    for message in messages:
+        sender = str(message.get("sender_id") or "")
+        if not sender or sender in bot_ids:
+            continue
+        reply_to = str(message.get("reply_to") or "")
+        text = clean_text(message.get("processed_plain_text") or "", 0)
+        is_hit = (
+            (reply_to and reply_to in bot_message_ids)
+            or (bot_name and bot_name in text)
+            or text.startswith("@")
+        )
+        if not is_hit:
+            continue
+        entry = stats.setdefault(
+            sender, {"name": clean_text(message.get("sender_name") or sender, 24), "count": 0}
+        )
+        entry["count"] += 1
+    return stats
+
+
+def collect_dossier_pool(
+    messages: list[dict[str, Any]],
+    *,
+    bot_ids: set[str],
+    bot_name: str,
+    focus_members: list[str] | None = None,
+    context: int = 2,
+) -> list[dict[str, Any]]:
+    """提取「与 bot 相关」的候选消息池（含前后 context 条上下文）。
+
+    Args:
+        messages: 按时间升序的完整消息列表。
+        bot_ids: bot 自己的 sender_id 集合。
+        bot_name: bot 昵称（文本提及匹配）。
+        focus_members: 指定聚焦的 QQ 号列表；非空时只保留与他们相关的片段。
+        context: 每个命中点附带的前后上下文条数。
+
+    Returns:
+        去重后按时间升序排列的候选消息列表。
+    """
+    bot_message_ids = {
+        str(message.get("message_id") or "")
+        for message in messages
+        if str(message.get("sender_id") or "") in bot_ids
+    }
+    id_to_index = {
+        str(message.get("message_id") or ""): index
+        for index, message in enumerate(messages)
+    }
+    focus_set = {str(member).strip() for member in (focus_members or []) if str(member).strip()}
+
+    hit_indexes: set[int] = set()
+    for index, message in enumerate(messages):
+        sender = str(message.get("sender_id") or "")
+        reply_to = str(message.get("reply_to") or "")
+        text = clean_text(message.get("processed_plain_text") or "", 0)
+        sender_is_bot = sender in bot_ids
+        is_reply_to_bot = bool(reply_to) and reply_to in bot_message_ids
+        mentions_bot = bool(bot_name) and bot_name in text
+        if not (sender_is_bot or is_reply_to_bot or mentions_bot):
+            continue
+        if focus_set:
+            # 聚焦模式：命中消息的发送者或被回复者须与聚焦成员相关
+            replied_sender = ""
+            reply_index = id_to_index.get(reply_to)
+            if reply_index is not None:
+                replied_sender = str(messages[reply_index].get("sender_id") or "")
+            if not focus_set.intersection({sender, replied_sender}):
+                continue
+        for offset in range(-context, context + 1):
+            pos = index + offset
+            if 0 <= pos < len(messages):
+                hit_indexes.add(pos)
+
+    return [messages[index] for index in sorted(hit_indexes)]

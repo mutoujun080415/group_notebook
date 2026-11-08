@@ -71,13 +71,14 @@ def report_url(slug: str, day: str, base: str = _DEFAULT_BASE,
 
 
 def parse_report_stem(stem: str) -> tuple[str, str] | None:
-    """解析产物文件名：``YYYY-MM-DD`` → day，``week-YYYY-MM-DD`` → week。
+    """解析产物文件名：``YYYY-MM-DD`` → day，``week-``/``dossier-`` 前缀同理。
 
     非法命名返回 None。
     """
-    if stem.startswith("week-"):
-        day = stem[5:]
-        return ("week", day) if is_valid_day(day) else None
+    for prefix, kind in (("week-", "week"), ("dossier-", "dossier")):
+        if stem.startswith(prefix):
+            day = stem[len(prefix):]
+            return (kind, day) if is_valid_day(day) else None
     return ("day", stem) if is_valid_day(stem) else None
 
 
@@ -94,9 +95,9 @@ def report_file(data_dir: Path, slug: str, day: str,
     产物根目录之内。
     """
     safe_slug = slug_for_stream(slug)
-    if safe_slug != slug or not is_valid_day(day) or kind not in ("day", "week"):
+    if safe_slug != slug or not is_valid_day(day) or kind not in ("day", "week", "dossier"):
         return None
-    prefix = "week-" if kind == "week" else ""
+    prefix = {"week": "week-", "dossier": "dossier-"}.get(kind, "")
     path = report_root(data_dir) / safe_slug / f"{prefix}{day}.png"
     try:
         resolved = path.resolve()

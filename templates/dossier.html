@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>{{ page_title }}</title>
+{{ fonts_css | safe }}
+<style>
+  :root {
+    --kraft: #f3e7cd;        /* 牛皮纸 */
+    --kraft-deep: #e8d5b0;
+    --folder: #fbf5e8;       /* 卷宗纸 */
+    --ink: #4a3728;
+    --ink-2: #7a6558;
+    --ink-3: #a89181;
+    --seal: #b3382c;         /* 印章红 */
+    --seal-soft: #e8c8bd;
+    --tape: rgba(196, 160, 100, .4);
+    --gold: #b98a2f;
+    --font-title: 'ZCOOL KuaiLe', 'LXGW WenKai', 'KaiTi', 'Microsoft YaHei', sans-serif;
+    --font-hand: 'LXGW WenKai', 'KaiTi', 'Microsoft YaHei', serif;
+    --font-body: 'Microsoft YaHei', 'LXGW WenKai', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    width: 800px;
+    background: var(--kraft);
+    background-image:
+      repeating-linear-gradient(45deg, rgba(122, 101, 88, .04) 0, rgba(122, 101, 88, .04) 2px, transparent 2px, transparent 9px),
+      linear-gradient(180deg, #f5ecd8, #ecdcbd);
+    color: var(--ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  .container {
+    position: relative;
+    margin: 24px;
+    padding: 30px 28px;
+    background: var(--folder);
+    border-radius: 6px;
+    box-shadow: 0 24px 50px rgba(74, 55, 40, .35), 0 4px 10px rgba(74, 55, 40, .2);
+  }
+  /* 打孔装订 */
+  .container::before {
+    content: '';
+    position: absolute;
+    left: 14px; top: 30px; bottom: 30px;
+    width: 18px;
+    background-image: radial-gradient(circle at 9px 9px, var(--kraft) 5px, rgba(0,0,0,.12) 6px, transparent 6.5px);
+    background-size: 18px 46px;
+  }
+  .sheet-line {
+    position: absolute;
+    inset: 14px;
+    border: 2px solid rgba(122, 101, 88, .35);
+    border-radius: 4px;
+    pointer-events: none;
+  }
+
+  /* 页眉 */
+  .head { position: relative; padding-left: 26px; }
+  .case-row { display: flex; justify-content: space-between; align-items: center; }
+  .case-no {
+    font-family: var(--font-body); font-size: 12px; font-weight: 700;
+    letter-spacing: 2px; color: var(--ink-2);
+    border: 1.5px solid var(--ink-3); border-radius: 4px; padding: 3px 10px;
+    background: rgba(255, 255, 255, .5);
+  }
+  .room { font-size: 12px; color: var(--ink-3); }
+  .title-block { display: flex; align-items: flex-start; gap: 16px; margin-top: 18px; }
+  .titles { flex: 1 1 auto; }
+  h1 {
+    margin: 0; font-family: var(--font-title); font-size: 40px; line-height: 1.2;
+    color: var(--seal);
+    text-shadow: 2px 2px 0 rgba(179, 56, 44, .15);
+  }
+  .focus-line {
+    margin-top: 10px; font-family: var(--font-hand); font-size: 15.5px; color: var(--ink-2);
+  }
+  .focus-line strong { color: var(--seal); }
+  .stamp {
+    position: absolute; right: 6px; top: -4px;
+    width: 108px; height: 108px; border-radius: 50%;
+    border: 4px solid rgba(179, 56, 44, .75);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transform: rotate(12deg);
+    color: rgba(179, 56, 44, .85); font-family: var(--font-title);
+    background:
+      radial-gradient(circle at 50% 50%, rgba(179, 56, 44, .06) 40%, transparent 70%);
+  }
+  .stamp .stamp-main { font-size: 22px; line-height: 1.25; text-align: center; }
+  .stamp .stamp-sub { font-size: 10.5px; letter-spacing: 1px; margin-top: 4px; }
+  .period-badge {
+    display: inline-block; margin-top: 12px;
+    background: #fff; border: 1.5px solid var(--ink-3); border-radius: 4px;
+    padding: 6px 14px; font-family: var(--font-hand); font-size: 13.5px; color: var(--ink);
+    box-shadow: 2px 2px 0 rgba(74, 55, 40, .12);
+  }
+
+  /* 陈述 */
+  .intro-card {
+    position: relative; margin-top: 22px;
+    background: #fff; border-radius: 8px; padding: 16px 20px;
+    border-left: 6px solid var(--seal);
+    box-shadow: 0 6px 14px rgba(74, 55, 40, .12);
+  }
+  .intro-label {
+    display: block; font-size: 11px; font-weight: 700; letter-spacing: 2px;
+    color: var(--seal); margin-bottom: 6px;
+  }
+  .intro-text { margin: 0; font-family: var(--font-hand); font-size: 15.5px; line-height: 1.85; color: var(--ink); }
+
+  /* 小节标题 */
+  .section { margin-top: 30px; position: relative; }
+  .section-head { display: flex; align-items: center; gap: 10px; }
+  .section-tag {
+    background: var(--seal); color: #fff; font-size: 11px; font-weight: 700;
+    letter-spacing: 2px; padding: 3px 10px; border-radius: 4px; transform: rotate(-1.5deg);
+  }
+  .section-head h2 { margin: 0; font-family: var(--font-title); font-size: 24px; color: var(--ink); }
+  .section-note { margin-left: auto; font-size: 12px; color: var(--ink-3); }
+
+  /* 主犯通缉栏 */
+  .culprit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
+  .wanted {
+    position: relative; background: #fff; border: 2px solid var(--ink);
+    border-radius: 10px; padding: 14px 14px 12px;
+    box-shadow: 4px 4px 0 rgba(74, 55, 40, .18);
+  }
+  .wanted .tape {
+    position: absolute; top: -9px; left: 50%; transform: translateX(-50%) rotate(-2deg);
+    width: 72px; height: 15px; background: var(--tape);
+  }
+  .wanted-top { display: flex; align-items: center; gap: 10px; }
+  .w-avatar {
+    width: 40px; height: 40px; border-radius: 50%; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-family: var(--font-title); font-size: 18px;
+    border: 2px solid #fff; box-shadow: 0 0 0 1.5px var(--ink);
+  }
+  .w-name { font-family: var(--font-title); font-size: 16px; color: var(--ink); line-height: 1.2; }
+  .w-title {
+    display: inline-block; margin-top: 3px; font-size: 10.5px; font-weight: 700;
+    color: #fff; background: var(--seal); border-radius: 4px; padding: 1px 7px;
+  }
+  .w-count { margin-left: auto; text-align: right; }
+  .w-count strong { display: block; font-family: var(--font-title); font-size: 20px; color: var(--seal); }
+  .w-count span { font-size: 10px; color: var(--ink-3); }
+  .w-profile {
+    margin: 10px 0 0; background: var(--kraft-deep); border-radius: 6px;
+    padding: 8px 10px; font-size: 12px; line-height: 1.6; color: var(--ink);
+  }
+
+  /* 案件卷宗卡 */
+  .case-card {
+    position: relative; margin-top: 18px;
+    background: #fff; border-radius: 10px;
+    border: 2px solid var(--ink);
+    box-shadow: 6px 6px 0 rgba(74, 55, 40, .14);
+    padding: 16px 20px 14px;
+  }
+  .case-card .clip {
+    position: absolute; top: -12px; left: 34px;
+    width: 60px; height: 20px;
+    border: 2.5px solid var(--ink-2); border-radius: 10px 10px 4px 4px;
+    background: linear-gradient(180deg, #d8cbb6, #c9b795);
+  }
+  .case-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .case-no-chip {
+    background: var(--ink); color: #fff; font-size: 11px; font-weight: 700;
+    padding: 2px 9px; border-radius: 4px; letter-spacing: 1px;
+  }
+  .case-time { font-family: var(--font-hand); font-size: 13px; color: var(--ink-2); }
+  .case-level { margin-left: auto; font-size: 14px; letter-spacing: 3px; color: var(--seal); }
+  .case-culprits { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .c-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #fff; border: 1.5px solid var(--cc); border-radius: 999px;
+    padding: 2px 9px 2px 3px; font-size: 11.5px; color: var(--ink);
+  }
+  .c-mini {
+    width: 16px; height: 16px; border-radius: 50%; color: #fff; font-size: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .c-label { font-size: 10.5px; color: var(--ink-3); }
+  .case-summary {
+    margin: 10px 0 0; font-size: 13.5px; line-height: 1.8; color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .case-note {
+    margin-top: 10px; background: var(--seal-soft); border-radius: 6px;
+    border-left: 4px solid var(--seal); padding: 8px 12px;
+  }
+  .note-label { display: block; font-size: 10.5px; font-weight: 700; color: var(--seal); margin-bottom: 3px; }
+  .note-text { margin: 0; font-size: 12.5px; line-height: 1.6; color: #6d4c41; }
+  .mention {
+    display: inline-block; background: #fff3e0; border: 1px solid #ffcc80;
+    border-radius: 999px; padding: 0 8px; font-size: 12px; color: #e65100; white-space: nowrap;
+  }
+
+  /* 结案陈词 */
+  .closing-card {
+    margin-top: 28px; border: 2px dashed var(--ink-2); border-radius: 12px;
+    background: rgba(255, 255, 255, .75); padding: 16px 20px;
+    display: flex; gap: 14px; align-items: center;
+  }
+  .closing-character { max-height: 96px; max-width: 120px; object-fit: contain; }
+  .closing-body { flex: 1; }
+  .closing-label {
+    display: block; font-size: 11px; font-weight: 700; letter-spacing: 2px;
+    color: var(--seal); margin-bottom: 4px;
+  }
+  .closing-text { margin: 0; font-family: var(--font-hand); font-size: 15px; line-height: 1.8; color: var(--ink); }
+
+  /* 页脚 */
+  .footer {
+    margin-top: 26px; border-top: 2px dashed var(--ink-3); padding-top: 14px;
+    display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="sheet-line"></div>
+
+  <header class="head">
+    <div class="case-row">
+      <span class="case-no">{{ case_no }}</span>
+      <span class="room">{{ room_name }}</span>
+    </div>
+    <div class="title-block">
+      <div class="titles">
+        <h1>{{ page_title }}</h1>
+        <p class="focus-line">专题焦点：<strong>{{ focus_word }}</strong>　·　受害者：{{ bot_name }}</p>
+      </div>
+      <div class="stamp">
+        <span class="stamp-main">已立案<br>示众</span>
+        <span class="stamp-sub">{{ period_text }}</span>
+      </div>
+    </div>
+    <div class="period-badge">统计周期：{{ period_text }}</div>
+  </header>
+
+  <section class="intro-card">
+    <span class="intro-label">受害者陈述</span>
+    <p class="intro-text">{{ intro | safe }}</p>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <span class="section-tag">WANTED</span>
+      <h2>主犯通缉栏</h2>
+      <span class="section-note">按与受害者互动次数排序</span>
+    </div>
+    {% if culprits %}
+    <div class="culprit-grid">
+      {% for p in culprits %}
+      <div class="wanted">
+        <div class="tape"></div>
+        <div class="wanted-top">
+          <span class="w-avatar" style="background: {{ p.color }}">{{ p.initial }}</span>
+          <div>
+            <div class="w-name">{{ p.name }}</div>
+            <span class="w-title">{{ p.title or '惯犯' }}</span>
+          </div>
+          <div class="w-count"><strong>{{ p.count }}</strong><span>次互动</span></div>
+        </div>
+        {% if p.profile %}<p class="w-profile">{{ p.profile }}</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <span class="section-tag">CASES</span>
+      <h2>案件卷宗</h2>
+      <span class="section-note">共 {{ cases | length }} 起，按恶劣程度排序</span>
+    </div>
+    {% for case in cases %}
+    <div class="case-card">
+      <div class="clip"></div>
+      <div class="case-head">
+        <span class="case-no-chip">案 {{ '%02d' | format(case.no) }}</span>
+        <span class="case-time">{{ case.time }}</span>
+        <span class="case-level">{{ case.stars }}</span>
+      </div>
+      <div class="case-culprits">
+        {% for name in case.culprits %}
+        <span class="c-chip"><span class="c-mini" style="background: {{ case.color }}">{{ name[:1] }}</span>{{ name }}</span>
+        {% endfor %}
+        <span class="c-label">对 {{ case.victim }} 实施了{{ focus_word }}</span>
+      </div>
+      <p class="case-summary">{{ case.summary_html | safe }}</p>
+      <div class="case-note">
+        <span class="note-label">{{ bot_name }}批注</span>
+        <p class="note-text">{{ case.comment_html | safe }}</p>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="closing-card">
+    {% if character.present %}<img class="closing-character" src="{{ character.uri }}" alt="">{% endif %}
+    <div class="closing-body">
+      <span class="closing-label">结案陈词</span>
+      <p class="closing-text">{{ closing }}</p>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <span>{{ page_title }}</span>
+    <span>{{ footer.note }} {{ footer.version }} · 来源 {{ source }}</span>
+    <span>生成于 {{ generated_at }}</span>
+  </footer>
+</div>
+</body>
+</html>

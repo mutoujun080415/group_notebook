@@ -9,6 +9,7 @@
     --bg-top: #fdf9f0; --bg-bottom: #f3ead9;
     --card: #fffdf8; --ink: #4e342e; --body: #7a6558; --muted: #a89181;
     --line: #eee0cd; --accent: #e0743a; --accent-soft: #fbeadb;
+    --seal: #b3382c; --seal-soft: #f6e3de;
     --ok: #1f9d63; --err: #d64545;
     --shadow: 0 18px 46px rgba(120, 84, 50, .10);
   }
@@ -43,26 +44,33 @@
   .stat-value { font-size: 18px; font-weight: 700; }
   .stat-label { font-size: 11px; color: var(--muted); }
 
-  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
-  .panel-head { display: flex; align-items: baseline; justify-content: space-between; padding: 16px 20px 0; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); margin-bottom: 18px; }
+  .panel-head { display: flex; align-items: baseline; justify-content: space-between; padding: 16px 20px 0; gap: 12px; flex-wrap: wrap; }
   .panel-head h2 { margin: 0; font-size: 15px; font-weight: 700; }
+  .panel-tag {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 1px; color: #fff;
+    background: var(--accent); border-radius: 4px; padding: 2px 8px; margin-right: 8px;
+  }
+  .panel-tag.seal { background: var(--seal); }
+  .panel-tag.violet { background: #7e57c2; }
   .muted { color: var(--muted); font-size: 12px; }
 
-  .controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 18px; padding: 18px 20px; margin-bottom: 18px; }
+  .controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; padding: 16px 20px 18px; }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field label { font-size: 11.5px; color: var(--muted); font-weight: 600; letter-spacing: .3px; }
   select, input[type="date"] {
-    min-width: 200px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px;
+    min-width: 170px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px;
     background: #fffdf8; color: var(--ink); font: inherit;
   }
   select:focus, input:focus { outline: 2px solid #f3d9bd; border-color: var(--accent); }
-  .actions { flex-direction: row; gap: 10px; margin-left: auto; }
+  .actions { flex-direction: row; gap: 10px; margin-left: auto; align-items: center; }
 
   .btn { border: 1px solid transparent; border-radius: 11px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
   .btn:disabled { opacity: .55; cursor: not-allowed; }
   .btn.primary { background: linear-gradient(145deg, #f09a55, #e0743a); color: #fff; box-shadow: 0 10px 22px rgba(224, 116, 58, .26); }
   .btn.ghost { background: var(--accent-soft); color: var(--accent); }
   .btn.ghost:hover:not(:disabled) { background: #f6ddc4; }
+  .btn.seal { background: linear-gradient(145deg, #c9503f, #b3382c); color: #fff; box-shadow: 0 10px 22px rgba(179, 56, 44, .26); }
 
   .hint { flex: 1 1 100%; font-size: 12px; color: var(--muted); min-height: 16px; }
   .hint[data-tone="error"] { color: var(--err); }
@@ -70,6 +78,12 @@
 
   .columns { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
   .history { display: flex; flex-direction: column; max-height: 76vh; }
+  .filter-tabs { display: flex; gap: 6px; padding: 10px 14px 0; flex-wrap: wrap; }
+  .filter-tabs button {
+    border: 1px solid var(--line); background: #fffaf2; border-radius: 999px;
+    padding: 3px 12px; font-size: 11.5px; color: var(--muted); cursor: pointer; font: inherit;
+  }
+  .filter-tabs button[data-active="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
   .history-list { padding: 12px 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
   .history-item {
     text-align: left; border: 1px solid var(--line); background: #fffaf2; border-radius: 12px;
@@ -81,6 +95,13 @@
   .history-item .row { display: flex; justify-content: space-between; gap: 8px; }
   .history-item .date { font-weight: 700; }
   .history-item .meta { font-size: 11.5px; color: var(--muted); }
+  .kind-badge {
+    display: inline-block; font-size: 10px; font-weight: 700; border-radius: 4px;
+    padding: 1px 6px; margin-right: 6px; vertical-align: 1px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .kind-badge.week { background: #ede7f6; color: #5e35b1; }
+  .kind-badge.dossier { background: var(--seal-soft); color: var(--seal); }
 
   .stage { display: flex; flex-direction: column; }
   .stage-body { padding: 16px 20px 22px; display: grid; place-items: start center; max-height: 76vh; overflow: auto; }
@@ -95,7 +116,7 @@
   }
   .empty strong { color: var(--body); font-size: 15px; }
 
-  .foot { margin-top: 18px; display: flex; justify-content: space-between; color: var(--muted); font-size: 11.5px; }
+  .foot { margin-top: 18px; display: flex; justify-content: space-between; color: var(--muted); font-size: 11.5px; gap: 12px; flex-wrap: wrap; }
 
   .toast {
     position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%);
@@ -105,7 +126,7 @@
   .toast[data-tone="error"] { background: #92242a; }
   .toast[data-tone="ok"] { background: #10714a; }
 
-  /* 封面/壁纸 */
+  /* 封面壁纸 */
   .cover-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; padding: 14px 20px 18px; align-items: start; }
   .cover-preview {
     min-height: 148px; border-radius: 14px; border: 1px dashed #e8d3b8; background: #fffaf2;
@@ -126,8 +147,25 @@
   .cover-controls .range { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
   .cover-controls input[type="range"] { flex: 1; }
 
+  /* 案底成员选择器 */
+  .member-list {
+    display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0 2px; max-height: 180px; overflow-y: auto;
+  }
+  .member-chip {
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+    border: 1.5px solid var(--line); background: #fffaf2; border-radius: 999px;
+    padding: 4px 12px 4px 5px; font-size: 12.5px; color: var(--ink); user-select: none;
+  }
+  .member-chip[data-active="true"] { border-color: var(--seal); background: var(--seal-soft); font-weight: 700; }
+  .member-chip .m-av {
+    width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .member-chip .m-count { color: var(--muted); font-size: 10.5px; }
+
   @media (max-width: 900px) {
     .columns { grid-template-columns: 1fr; }
+    .cover-body { grid-template-columns: 1fr; }
     .actions { margin-left: 0; }
     .topbar { flex-direction: column; }
   }
@@ -141,7 +179,7 @@
       <div>
         <div class="eyebrow">GROUP NOTEBOOK · 群聊摘录</div>
         <h1>群聊摘录</h1>
-        <p class="sub">把一天的热闹收成一页手账。选群、选日期，生成、预览、补发都在这。</p>
+        <p class="sub">日报 · 周记 · 专题案底，把热闹一页页收进本子。</p>
       </div>
     </div>
     <div class="topbar-right">
@@ -151,29 +189,76 @@
     </div>
   </header>
 
-  <section class="panel controls">
-    <div class="field">
-      <label for="sel-group">群聊</label>
-      <select id="sel-group"></select>
+  <!-- 区块① 日报 -->
+  <section class="panel">
+    <div class="panel-head">
+      <h2><span class="panel-tag">日报</span>单日手账</h2>
+      <span class="muted">生成当天或补历史某一天，可批量补一段区间（只出图不发群）</span>
     </div>
-    <div class="field">
-      <label for="inp-date">日期</label>
-      <input id="inp-date" type="date">
+    <div class="controls">
+      <div class="field">
+        <label for="sel-group">群聊</label>
+        <select id="sel-group"></select>
+      </div>
+      <div class="field">
+        <label for="inp-date">日期</label>
+        <input id="inp-date" type="date">
+      </div>
+      <div class="field">
+        <label for="inp-date-end">结束日期（批量，可选）</label>
+        <input id="inp-date-end" type="date">
+      </div>
+      <div class="field actions">
+        <button class="btn primary" id="btn-generate" type="button">生成并发送</button>
+        <button class="btn ghost" id="btn-preview" type="button">仅生成</button>
+        <button class="btn ghost" id="btn-batch" type="button">批量补生成</button>
+      </div>
+      <div class="hint" id="hint-daily"></div>
     </div>
-    <div class="field">
-      <label for="inp-date-end">结束日期（批量，可选）</label>
-      <input id="inp-date-end" type="date">
-    </div>
-    <div class="field actions">
-      <button class="btn primary" id="btn-generate" type="button">生成并发送</button>
-      <button class="btn ghost" id="btn-preview" type="button">仅生成</button>
-      <button class="btn ghost" id="btn-batch" type="button">批量补生成</button>
-      <button class="btn ghost" id="btn-weekly" type="button">生成周报</button>
-      <button class="btn ghost" id="btn-weekly-send" type="button">周报并发送</button>
-    </div>
-    <div class="hint" id="conn-hint"></div>
   </section>
 
+  <!-- 区块② 周记 -->
+  <section class="panel">
+    <div class="panel-head">
+      <h2><span class="panel-tag violet">周记</span>一周一页</h2>
+      <span class="muted">生成上面「日期」所在自然周（周一为始，未结束则统计到当前），内容按周尺度提炼</span>
+    </div>
+    <div class="controls">
+      <div class="muted" style="padding: 4px 0;">群与日期沿用日报区的选择。</div>
+      <div class="field actions">
+        <button class="btn ghost" id="btn-weekly" type="button">生成周记</button>
+        <button class="btn ghost" id="btn-weekly-send" type="button">周记并发送</button>
+      </div>
+      <div class="hint" id="hint-weekly"></div>
+    </div>
+  </section>
+
+  <!-- 区块③ 专题案底 -->
+  <section class="panel">
+    <div class="panel-head">
+      <h2><span class="panel-tag seal">案底</span>迫害记录簿</h2>
+      <span class="muted">聚焦成员，把这一周对 bot 的「罪行」单独立卷示众（独立一张图）</span>
+    </div>
+    <div class="controls">
+      <div class="field" style="flex: 1 1 100%;">
+        <label>聚焦成员（点选；不选则自动聚焦与 bot 互动最多的 Top 3）</label>
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <button class="btn ghost" id="btn-load-members" type="button">加载成员列表</button>
+          <span class="muted" id="members-meta">先在日报区选好群与日期，再点加载</span>
+        </div>
+        <div class="member-list" id="member-list" hidden>
+          <span class="muted">加载中…</span>
+        </div>
+      </div>
+      <div class="field actions">
+        <button class="btn ghost" id="btn-dossier" type="button">生成案底</button>
+        <button class="btn seal" id="btn-dossier-send" type="button">案底并发送</button>
+      </div>
+      <div class="hint" id="hint-dossier"></div>
+    </div>
+  </section>
+
+  <!-- 区块④ 封面壁纸 -->
   <section class="panel">
     <div class="panel-head">
       <h2>封面壁纸</h2>
@@ -203,19 +288,26 @@
     </div>
   </section>
 
+  <!-- 区块⑤ 历史摘录 + 预览 -->
   <section class="columns">
     <aside class="panel history">
       <div class="panel-head"><h2>历史摘录</h2><span class="muted" id="history-count"></span></div>
+      <div class="filter-tabs" id="filter-tabs">
+        <button type="button" data-filter="all" data-active="true">全部</button>
+        <button type="button" data-filter="day">日报</button>
+        <button type="button" data-filter="week">周记</button>
+        <button type="button" data-filter="dossier">案底</button>
+      </div>
       <div class="history-list" id="history-list"></div>
     </aside>
     <main class="panel stage">
-      <div class="panel-head"><h2 id="stage-title">手账预览</h2><span class="muted" id="stage-meta"></span></div>
+      <div class="panel-head"><h2 id="stage-title">预览</h2><span class="muted" id="stage-meta"></span></div>
       <div class="stage-body">
         <div class="empty" id="stage-empty">
           <strong>还没有预览</strong>
           <span>选个有消息的日子，点「仅生成」，第一次大概 10–60 秒。</span>
         </div>
-        <img id="stage-image" alt="群聊摘录手账" hidden>
+        <img id="stage-image" alt="群聊摘录" hidden>
       </div>
     </main>
   </section>
@@ -231,7 +323,8 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { groups: [], reports: [], activeKey: null, busy: false, objectUrl: null };
+const state = { groups: [], reports: [], activeKey: null, busy: false, objectUrl: null,
+                filter: 'all', members: [], picked: [] };
 
 let toastTimer = null;
 function toast(message, tone = 'info') {
@@ -243,8 +336,8 @@ function toast(message, tone = 'info') {
   toastTimer = setTimeout(() => { el.hidden = true; }, 4200);
 }
 
-function setHint(text, tone) {
-  const el = $('conn-hint');
+function setHint(id, text, tone) {
+  const el = $(id);
   el.textContent = text || '';
   if (tone) el.dataset.tone = tone; else delete el.dataset.tone;
 }
@@ -268,7 +361,8 @@ async function api(path, options = {}) {
     throw new Error(detail);
   }
   if (payload && payload.code && payload.code !== 200) {
-    throw new Error(payload.message || ('请求失败（' + payload.code + '）'));
+    const msg = payload.message;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg || payload.code));
   }
   return payload ? payload.data : payload;
 }
@@ -293,25 +387,29 @@ function renderGroups() {
 function renderHistory() {
   const box = $('history-list');
   box.innerHTML = '';
-  $('history-count').textContent = state.reports.length ? state.reports.length + ' 条' : '';
-  if (!state.reports.length) {
+  const visible = state.reports.filter((report) => state.filter === 'all' || report.kind === state.filter);
+  $('history-count').textContent = visible.length ? visible.length + ' 条' : '';
+  if (!visible.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
     empty.style.minHeight = '160px';
-    empty.innerHTML = '<strong>还没有摘录</strong><span>生成第一张之后会按日期排在里。</span>';
+    empty.innerHTML = '<strong>这个分类下还没有产物</strong><span>生成之后会按日期排在这里。</span>';
     box.appendChild(empty);
     return;
   }
-  state.reports.forEach((report) => {
+  visible.forEach((report) => {
     const item = document.createElement('button');
     item.type = 'button';
     item.className = 'history-item';
-    item.dataset.active = String(report.slug + ':' + report.date === state.activeKey);
+    item.dataset.active = String(report.slug + ':' + report.kind + ':' + report.date === state.activeKey);
     const row = document.createElement('div');
     row.className = 'row';
     const date = document.createElement('span');
     date.className = 'date';
-    date.textContent = (report.kind === 'week' ? '【周记】' : '') + report.date;
+    const badge = document.createElement('span');
+    badge.className = 'kind-badge' + (report.kind === 'week' ? ' week' : (report.kind === 'dossier' ? ' dossier' : ''));
+    badge.textContent = report.kind === 'week' ? '周记' : (report.kind === 'dossier' ? '案底' : '日报');
+    date.append(badge, document.createTextNode(report.date));
     const size = document.createElement('span');
     size.className = 'meta';
     size.textContent = fmtSize(report.size);
@@ -330,28 +428,29 @@ function revokeObjectUrl() {
 }
 
 async function showReport(report) {
-  state.activeKey = report.slug + ':' + report.date;
+  state.activeKey = report.slug + ':' + report.kind + ':' + report.date;
   renderHistory();
-  $('stage-title').textContent = report.date + ' · ' + (report.group_name || '');
+  const kindText = report.kind === 'week' ? '周记' : (report.kind === 'dossier' ? '案底' : '日报');
+  $('stage-title').textContent = report.date + ' · ' + (report.group_name || '') + '（' + kindText + '）';
   $('stage-meta').textContent = fmtSize(report.size) + ' · ' + (report.mtime_text || '');
   $('stage-empty').hidden = true;
   $('stage-image').hidden = true;
   revokeObjectUrl();
   try {
-    const kindParam = report.kind === 'week' ? '&kind=week' : '';
+    const kindParam = report.kind && report.kind !== 'day' ? '&kind=' + encodeURIComponent(report.kind) : '';
     const blob = await api('api/image?slug=' + encodeURIComponent(report.slug) + '&date=' + encodeURIComponent(report.date) + kindParam);
     state.objectUrl = URL.createObjectURL(blob);
     $('stage-image').src = state.objectUrl;
     $('stage-image').hidden = false;
   } catch (error) {
     $('stage-empty').hidden = false;
-    $('stage-empty').innerHTML = '<strong>手账没取到</strong><span>' + error.message + '</span>';
+    $('stage-empty').innerHTML = '<strong>产物没取到</strong><span>' + error.message + '</span>';
   }
 }
 
 function showLatest() {
   if (!state.reports.length) {
-    $('stage-title').textContent = '手账预览';
+    $('stage-title').textContent = '预览';
     $('stage-meta').textContent = '';
     $('stage-empty').hidden = false;
     $('stage-empty').innerHTML = '<strong>还没有预览</strong><span>选个有消息的日子，点「仅生成」，第一次大概 10–60 秒。</span>';
@@ -367,7 +466,6 @@ async function loadState() {
   $('stat-count').textContent = String(data.reports || 0);
   $('stat-latest').textContent = data.latest ? data.latest.date : '—';
   $('foot-version').textContent = '群聊摘录 v' + (data.version || '');
-  // 地址/端口跟随主程序 core.toml 的 [http_router]，由插件运行时解析
   $('foot-url').textContent = data.webui_url
     ? '页面地址：' + data.webui_url
     : 'HTTP 路由未启用或未就绪（见 core.toml 的 [http_router]）';
@@ -386,70 +484,68 @@ async function refresh(selectLatest) {
   try {
     await loadState();
     await loadReports(selectLatest);
-    setHint('就绪', 'ok');
+    setHint('hint-daily', '就绪', 'ok');
     $('foot-status').textContent = '已连接本机插件接口';
   } catch (error) {
-    setHint('加载失败：' + error.message, 'error');
+    setHint('hint-daily', '加载失败：' + error.message, 'error');
     $('foot-status').textContent = '连接失败';
   }
+}
+
+function setBusy(disabled) {
+  ['btn-generate', 'btn-preview', 'btn-batch', 'btn-weekly', 'btn-weekly-send', 'btn-dossier', 'btn-dossier-send']
+    .forEach((id) => { $(id).disabled = disabled; });
 }
 
 async function generate(send) {
   if (state.busy) return;
   const groupId = $('sel-group').value;
-  if (!groupId) { setHint('插件配置里没有群号，先填 general.groups', 'error'); return; }
+  if (!groupId) { setHint('hint-daily', '插件配置里没有群号，先填 general.groups', 'error'); return; }
   const day = $('inp-date').value;
-  if (!day) { setHint('先选日期', 'error'); return; }
+  if (!day) { setHint('hint-daily', '先选日期', 'error'); return; }
   if (send && !confirm('「生成并发送」会立刻把手账发到群里，确定吗？')) return;
 
   state.busy = true;
-  $('btn-generate').disabled = true;
-  $('btn-preview').disabled = true;
+  setBusy(true);
   const started = Date.now();
   const tick = setInterval(() => {
-    setHint((send ? '正在生成并发送' : '正在生成手账') + '… ' + Math.round((Date.now() - started) / 1000) + 's');
+    setHint('hint-daily', (send ? '正在生成并发送' : '正在生成手账') + '… ' + Math.round((Date.now() - started) / 1000) + 's');
   }, 1000);
-
   try {
     const data = (await api('api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ group_id: groupId, date: day, send: send, regenerate: true }),
     })) || {};
-    setHint(data.message || '完成', data.ok ? 'ok' : 'error');
+    setHint('hint-daily', data.message || '完成', data.ok ? 'ok' : 'error');
     toast(data.message || '完成', data.ok ? 'ok' : 'error');
     await loadState();
     await loadReports(true);
-    const target = state.reports.find((report) => report.date === day);
+    const target = state.reports.find((report) => report.date === day && report.kind === 'day');
     if (target) showReport(target);
   } catch (error) {
-    setHint('生成失败：' + error.message, 'error');
+    setHint('hint-daily', '生成失败：' + error.message, 'error');
     toast(error.message || '生成失败', 'error');
   } finally {
     clearInterval(tick);
     state.busy = false;
-    $('btn-generate').disabled = false;
-    $('btn-preview').disabled = false;
+    setBusy(false);
   }
 }
-
-$('btn-refresh').addEventListener('click', () => refresh(false));
-$('btn-generate').addEventListener('click', () => generate(true));
-$('btn-preview').addEventListener('click', () => generate(false));
 
 async function generateBatch() {
   if (state.busy) return;
   const groupId = $('sel-group').value;
-  if (!groupId) { setHint('插件配置里没有群号，先填 general.groups', 'error'); return; }
+  if (!groupId) { setHint('hint-daily', '插件配置里没有群号，先填 general.groups', 'error'); return; }
   const start = $('inp-date').value;
   const end = $('inp-date-end').value || start;
-  if (!start || !end) { setHint('先选起始/结束日期', 'error'); return; }
+  if (!start || !end) { setHint('hint-daily', '先选起始/结束日期', 'error'); return; }
 
   state.busy = true;
-  $('btn-batch').disabled = true;
+  setBusy(true);
   const started = Date.now();
   const tick = setInterval(() => {
-    setHint('正在批量生成 ' + start + ' ~ ' + end + ' … ' + Math.round((Date.now() - started) / 1000) + 's');
+    setHint('hint-daily', '正在批量生成 ' + start + ' ~ ' + end + ' … ' + Math.round((Date.now() - started) / 1000) + 's');
   }, 1000);
   try {
     const data = (await api('api/generate_batch', {
@@ -458,35 +554,34 @@ async function generateBatch() {
       body: JSON.stringify({ group_id: groupId, date_start: start, date_end: end }),
     })) || {};
     const failed = (data.results || []).filter((item) => !item.ok);
-    setHint('批量完成：成功 ' + data.ok + '/' + data.total + ' 天' +
+    setHint('hint-daily', '批量完成：成功 ' + data.ok + '/' + data.total + ' 天' +
             (failed.length ? '；失败：' + failed.map((item) => item.date).join('、') : ''), data.ok ? 'ok' : 'error');
     toast('批量完成：成功 ' + data.ok + '/' + data.total + ' 天', data.ok ? 'ok' : 'error');
     await loadState();
     await loadReports(true);
   } catch (error) {
-    setHint('批量生成失败：' + error.message, 'error');
+    setHint('hint-daily', '批量生成失败：' + error.message, 'error');
     toast(error.message || '批量生成失败', 'error');
   } finally {
     clearInterval(tick);
     state.busy = false;
-    $('btn-batch').disabled = false;
+    setBusy(false);
   }
 }
 
 async function generateWeekly(send) {
   if (state.busy) return;
   const groupId = $('sel-group').value;
-  if (!groupId) { setHint('插件配置里没有群号，先填 general.groups', 'error'); return; }
+  if (!groupId) { setHint('hint-weekly', '插件配置里没有群号，先填 general.groups', 'error'); return; }
   const day = $('inp-date').value;
-  if (!day) { setHint('先选一个日期（生成它所在的那一周）', 'error'); return; }
-  if (send && !confirm('「周报并发送」会立刻把周记发到群里，确定吗？')) return;
+  if (!day) { setHint('hint-weekly', '先在日报区选一个日期（生成它所在的那一周）', 'error'); return; }
+  if (send && !confirm('「周记并发送」会立刻把周记发到群里，确定吗？')) return;
 
   state.busy = true;
-  $('btn-weekly').disabled = true;
-  $('btn-weekly-send').disabled = true;
+  setBusy(true);
   const started = Date.now();
   const tick = setInterval(() => {
-    setHint('正在' + (send ? '生成并发送' : '生成') + '周记（' + day + ' 所在周）… '
+    setHint('hint-weekly', '正在' + (send ? '生成并发送' : '生成') + '周记（' + day + ' 所在周）… '
             + Math.round((Date.now() - started) / 1000) + 's');
   }, 1000);
   try {
@@ -495,24 +590,123 @@ async function generateWeekly(send) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ group_id: groupId, date: day, send: send }),
     })) || {};
-    setHint(data.message || '周记完成', data.ok ? 'ok' : 'error');
+    setHint('hint-weekly', data.message || '周记完成', data.ok ? 'ok' : 'error');
     toast(data.message || '周记完成', data.ok ? 'ok' : 'error');
     await loadState();
     await loadReports(true);
   } catch (error) {
-    setHint('周记生成失败：' + error.message, 'error');
+    setHint('hint-weekly', '周记生成失败：' + error.message, 'error');
     toast(error.message || '周记生成失败', 'error');
   } finally {
     clearInterval(tick);
     state.busy = false;
-    $('btn-weekly').disabled = false;
-    $('btn-weekly-send').disabled = false;
+    setBusy(false);
   }
 }
 
+async function loadMembers() {
+  const groupId = $('sel-group').value;
+  if (!groupId) { setHint('hint-dossier', '先在日报区选好群', 'error'); return; }
+  const day = $('inp-date').value;
+  if (!day) { setHint('hint-dossier', '先在日报区选好日期（用于定位周）', 'error'); return; }
+  $('member-list').hidden = false;
+  $('member-list').innerHTML = '<span class="muted">统计中…（需要扫一周消息，稍等）</span>';
+  $('members-meta').textContent = '加载中…';
+  try {
+    const data = (await api('api/members?group_id=' + encodeURIComponent(groupId)
+                            + '&date=' + encodeURIComponent(day))) || {};
+    state.members = data.members || [];
+    state.picked = state.members.slice(0, 3).map((member) => member.qq);
+    $('members-meta').textContent = data.week + ' 当周 · 共 ' + state.members.length
+      + ' 名与 bot 有互动的成员（默认勾选互动前 3）';
+    const box = $('member-list');
+    box.innerHTML = '';
+    if (!state.members.length) {
+      box.innerHTML = '<span class="muted">这一周还没有成员与 bot 互动。</span>';
+      return;
+    }
+    state.members.forEach((member, index) => {
+      const chip = document.createElement('span');
+      chip.className = 'member-chip';
+      chip.dataset.active = String(state.picked.includes(member.qq));
+      const av = document.createElement('span');
+      av.className = 'm-av';
+      av.style.background = 'hsl(' + (index * 47 % 360) + ' 45% 55%)';
+      av.textContent = (member.name || '?').slice(0, 1);
+      const name = document.createElement('span');
+      name.textContent = member.name;
+      const count = document.createElement('span');
+      count.className = 'm-count';
+      count.textContent = '互动 ' + member.count + ' 次';
+      chip.append(av, name, count);
+      chip.addEventListener('click', () => {
+        const picked = state.picked.includes(member.qq);
+        if (picked) state.picked = state.picked.filter((qq) => qq !== member.qq);
+        else state.picked.push(member.qq);
+        chip.dataset.active = String(!picked);
+      });
+      box.appendChild(chip);
+    });
+  } catch (error) {
+    $('member-list').innerHTML = '<span class="muted">加载失败：' + error.message + '</span>';
+    $('members-meta').textContent = '加载失败';
+  }
+}
+
+async function generateDossier(send) {
+  if (state.busy) return;
+  const groupId = $('sel-group').value;
+  if (!groupId) { setHint('hint-dossier', '先在日报区选好群', 'error'); return; }
+  const day = $('inp-date').value;
+  if (!day) { setHint('hint-dossier', '先在日报区选好日期', 'error'); return; }
+  if (send && !confirm('「案底并发送」会立刻把案底卷宗发到群里，确定吗？')) return;
+
+  state.busy = true;
+  setBusy(true);
+  const started = Date.now();
+  const tick = setInterval(() => {
+    setHint('hint-dossier', '正在' + (send ? '生成并发送' : '生成') + '案底卷宗… '
+            + Math.round((Date.now() - started) / 1000) + 's');
+  }, 1000);
+  try {
+    const data = (await api('api/generate_dossier', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: groupId, date: day,
+                             members: state.picked, send: send }),
+    })) || {};
+    setHint('hint-dossier', data.message || '案底完成', data.ok ? 'ok' : 'error');
+    toast(data.message || '案底完成', data.ok ? 'ok' : 'error');
+    await loadState();
+    await loadReports(true);
+  } catch (error) {
+    setHint('hint-dossier', '案底生成失败：' + error.message, 'error');
+    toast(error.message || '案底生成失败', 'error');
+  } finally {
+    clearInterval(tick);
+    state.busy = false;
+    setBusy(false);
+  }
+}
+
+$('btn-refresh').addEventListener('click', () => refresh(false));
+$('btn-generate').addEventListener('click', () => generate(true));
+$('btn-preview').addEventListener('click', () => generate(false));
 $('btn-batch').addEventListener('click', generateBatch);
 $('btn-weekly').addEventListener('click', () => generateWeekly(false));
 $('btn-weekly-send').addEventListener('click', () => generateWeekly(true));
+$('btn-load-members').addEventListener('click', loadMembers);
+$('btn-dossier').addEventListener('click', () => generateDossier(false));
+$('btn-dossier-send').addEventListener('click', () => generateDossier(true));
+document.querySelectorAll('#filter-tabs button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    state.filter = btn.dataset.filter;
+    document.querySelectorAll('#filter-tabs button').forEach((other) => {
+      other.dataset.active = String(other === btn);
+    });
+    renderHistory();
+  });
+});
 
 const now = new Date();
 const pad = (value) => String(value).padStart(2, '0');

@@ -332,3 +332,127 @@ class NotebookReport:
             llm_error=str(data.get("llm_error") or ""),
             generated_at=str(data.get("generated_at") or ""),
         )
+
+
+@dataclass(slots=True)
+class DossierCase:
+    """卷宗里的一起案件。"""
+
+    no: int = 0
+    time: str = ""
+    culprits: list[str] = field(default_factory=list)
+    victim: str = ""
+    summary: str = ""
+    comment: str = ""
+    level: int = 3
+
+    def to_dict(self) -> dict[str, Any]:
+        """转换为字典。"""
+        return {
+            "no": self.no,
+            "time": self.time,
+            "culprits": list(self.culprits),
+            "victim": self.victim,
+            "summary": self.summary,
+            "comment": self.comment,
+            "level": self.level,
+        }
+
+
+@dataclass(slots=True)
+class DossierCulprit:
+    """主犯通缉卡。"""
+
+    name: str = ""
+    title: str = ""
+    count: int = 0
+    profile: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """转换为字典。"""
+        return {
+            "name": self.name,
+            "title": self.title,
+            "count": self.count,
+            "profile": self.profile,
+        }
+
+
+@dataclass(slots=True)
+class DossierReport:
+    """一张专题案底（迫害记录簿）所需的全部数据。"""
+
+    date: str
+    room_name: str
+    bot_name: str
+    page_title: str
+    period_text: str
+    case_no: str = ""
+    focus_word: str = ""
+    intro: str = ""
+    culprits: list[DossierCulprit] = field(default_factory=list)
+    cases: list[DossierCase] = field(default_factory=list)
+    closing: str = ""
+    source: str = "fallback"
+    llm_error: str = ""
+    generated_at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """转换为可持久化的字典。"""
+        return {
+            "date": self.date,
+            "room_name": self.room_name,
+            "bot_name": self.bot_name,
+            "page_title": self.page_title,
+            "period_text": self.period_text,
+            "case_no": self.case_no,
+            "focus_word": self.focus_word,
+            "intro": self.intro,
+            "culprits": [item.to_dict() for item in self.culprits],
+            "cases": [item.to_dict() for item in self.cases],
+            "closing": self.closing,
+            "source": self.source,
+            "llm_error": self.llm_error,
+            "generated_at": self.generated_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DossierReport":
+        """从持久化字典还原案底。"""
+        return cls(
+            date=str(data.get("date") or ""),
+            room_name=str(data.get("room_name") or ""),
+            bot_name=str(data.get("bot_name") or ""),
+            page_title=str(data.get("page_title") or ""),
+            period_text=str(data.get("period_text") or ""),
+            case_no=str(data.get("case_no") or ""),
+            focus_word=str(data.get("focus_word") or ""),
+            intro=str(data.get("intro") or ""),
+            culprits=[
+                DossierCulprit(
+                    name=str(item.get("name") or ""),
+                    title=str(item.get("title") or ""),
+                    count=int(item.get("count") or 0),
+                    profile=str(item.get("profile") or ""),
+                )
+                for item in data.get("culprits") or []
+                if isinstance(item, dict)
+            ],
+            cases=[
+                DossierCase(
+                    no=int(item.get("no") or 0),
+                    time=str(item.get("time") or ""),
+                    culprits=[str(n) for n in item.get("culprits") or [] if str(n)],
+                    victim=str(item.get("victim") or ""),
+                    summary=str(item.get("summary") or ""),
+                    comment=str(item.get("comment") or ""),
+                    level=int(item.get("level") or 3),
+                )
+                for item in data.get("cases") or []
+                if isinstance(item, dict)
+            ],
+            closing=str(data.get("closing") or ""),
+            source=str(data.get("source") or "fallback"),
+            llm_error=str(data.get("llm_error") or ""),
+            generated_at=str(data.get("generated_at") or ""),
+        )

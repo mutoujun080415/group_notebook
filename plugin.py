@@ -19,7 +19,7 @@ from src.app.plugin_system.types import ChatStream
 from src.kernel.concurrency import get_task_manager
 from src.kernel.scheduler import TriggerType, get_unified_scheduler
 
-from .command import NotebookCommand, NotebookWeeklyCommand, _parse_permission
+from .command import DossierCommand, NotebookCommand, NotebookWeeklyCommand, _parse_permission
 from .config import GroupNotebookConfig
 from .renderer import shutdown_browser
 from .router import NotebookWebUIRouter
@@ -53,7 +53,7 @@ class GroupNotebookPlugin(BasePlugin):
 
     def get_components(self) -> list[type]:
         """返回插件组件；独立页面由 ``webui.mount_on_main_http`` 决定是否挂载。"""
-        components: list[type] = [NotebookService, NotebookCommand, NotebookWeeklyCommand]
+        components: list[type] = [NotebookService, NotebookCommand, NotebookWeeklyCommand, DossierCommand]
         if self._config().webui.mount_on_main_http:
             components.append(NotebookWebUIRouter)
         return components
@@ -67,7 +67,9 @@ class GroupNotebookPlugin(BasePlugin):
         NotebookCommand.permission_level = _parse_permission(config.general.command_permission)
         NotebookCommand.associated_platforms = [config.general.platform]
         NotebookWeeklyCommand.permission_level = _parse_permission(config.general.command_permission)
+        DossierCommand.permission_level = _parse_permission(config.general.command_permission)
         NotebookWeeklyCommand.associated_platforms = [config.general.platform]
+        DossierCommand.associated_platforms = [config.general.platform]
         self._load_state()
 
         if not config.general.enabled:

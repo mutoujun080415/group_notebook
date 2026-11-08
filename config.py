@@ -298,6 +298,43 @@ class GroupNotebookConfig(BaseConfig):
 
     webui: WebUISection = Field(default_factory=WebUISection)
 
+    @config_section("dossier", title="专题案底", tag="dossier")
+    class DossierSection(SectionBase):
+        """专题案底（迫害记录簿）设置——独立于日报/周记的一张卷宗长图。"""
+
+        enabled: bool = Field(
+            default=True,
+            description="是否启用专题案底",
+            label="启用案底",
+        )
+        title: str = Field(
+            default="迫害记录簿",
+            description="案底专题名（页面大标题）",
+            label="专题名",
+        )
+        focus_word: str = Field(
+            default="",
+            description="筛选焦点描述，喂给模型；留空自动使用「迫害{bot_name}」",
+            label="焦点描述",
+        )
+        max_cases: int = Field(
+            default=6,
+            description="卷宗里展示的案件数量上限",
+            label="案件数量",
+        )
+        top_members: int = Field(
+            default=3,
+            description="主犯通缉栏展示的人数上限",
+            label="主犯数量",
+        )
+        auto_with_weekly: bool = Field(
+            default=False,
+            description="生成周记时是否顺带自动生成案底",
+            label="随周记生成",
+        )
+
+    dossier: DossierSection = Field(default_factory=DossierSection)
+
     def resolved_page_title(self) -> str:
         """返回最终的主标题：未配置时按机器人名自动生成。"""
         title = (self.notebook.page_title or "").strip()

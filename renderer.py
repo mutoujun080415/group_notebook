@@ -514,12 +514,17 @@ class NotebookRenderer:
         html_path.write_text(html_text, encoding="utf-8")
 
         notebook = self._config.notebook
-        channel = (notebook.browser_channel or "").strip().lower()
-        if channel in {"none", "off", "chromium"}:
-            channel = ""
         scale = max(1, min(3, int(notebook.viewport_scale or 2)))
         timeout = max(15.0, float(notebook.render_timeout_seconds or 90))
 
+        return await self._screenshot(html_path, png_path, scale, timeout)
+
+    async def _screenshot(self, html_path: Path, png_path: Path,
+                          scale: int, timeout: float) -> tuple[int, int]:
+        """把已写好的 HTML 截成长图（playwright 管线共用）。"""
+        channel = (self._config.notebook.browser_channel or "").strip().lower()
+        if channel in {"none", "off", "chromium"}:
+            channel = ""
         browser = await _holder.acquire(channel)
         page = await browser.new_page(
             viewport={"width": _MAX_PAGE_WIDTH, "height": 1000},
@@ -557,6 +562,80 @@ class NotebookRenderer:
         if not png_path.is_file() or png_path.stat().st_size == 0:
             raise RuntimeError(f"截图未写出有效 PNG：{png_path}")
         return (_MAX_PAGE_WIDTH * scale, int(body_height or 0))
+
+    # ------------------------------------------------------------ 案底卷宗
+
+    def build_dossier_context(self, report: Any) -> dict[str, Any]:
+        """组装案底卷宗模板上下文（纯函数，便于测试）。"""
+        known_names = [item.name for item in report.culprits]
+        for case in report.cases:
+            for name in case.culprits:
+                if name and name not in known_names:
+                    known_names.append(name)
+        return {
+            "page_title": report.page_title,
+            "case_no": report.case_no,
+            "period_text": report.period_text,
+            "room_name": report.room_name,
+            "bot_name": report.bot_name,
+            "focus_word": report.focus_word,
+            "intro": rich_html(report.intro, []),
+            "culprits": [
+                {
+                    **item.to_dict(),
+                    "color": color_for(item.name),
+                    "initial": initial_for(item.name),
+                }
+                for item in report.culprits
+            ],
+            "cases": [
+                {
+                    **case.to_dict(),
+                    "summary_html": rich_html(case.summary, known_names),
+                    "comment_html": rich_html(case.comment, known_names),
+                    "stars": "★" * max(1, min(5, case.level)) + "☆" * (5 - max(1, min(5, case.level))),
+                    "color": color_for(case.culprits[0] if case.culprits else "?"),
+                }
+                for case in report.cases
+            ],
+            "closing": plain_html(report.closing),
+            "character": character_info(self._config, self._base_dir),
+            "generated_at": report.generated_at,
+            "source": report.source,
+            "footer": {"note": "Neo-MoFox · 群聊摘录插件",
+                       "version": plugin_version(self._base_dir)},
+            "fonts_css": fonts_css(self._base_dir),
+        }
+
+    def render_dossier_html(self, report: Any) -> str:
+        """填充案底卷宗模板。"""
+        template = self._env.get_template("dossier.html") if self._env else None
+        if template is None:
+            try:
+                from jinja2 import Environment, FileSystemLoader, select_autoescape
+            except ImportError as exc:  # pragma: no cover
+                raise RuntimeError("缺少 jinja2 依赖，请先安装：uv add jinja2") from exc
+            self._env = Environment(
+                loader=FileSystemLoader(str(self._base_dir / "templates")),
+                autoescape=select_autoescape(default=True),
+                trim_blocks=True,
+                lstrip_blocks=True,
+            )
+            template = self._env.get_template("dossier.html")
+        return template.render(**self.build_dossier_context(report))
+
+    async def render_dossier(self, report: Any, png_path: Path, html_path: Path) -> tuple[int, int]:
+        """渲染案底卷宗并截图保存 PNG。"""
+        html_text = self.render_dossier_html(report)
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text(html_text, encoding="utf-8")
+        notebook = self._config.notebook
+        scale = max(1, min(3, int(notebook.viewport_scale or 2)))
+        timeout = max(15.0, float(notebook.render_timeout_seconds or 90))
+        await self._screenshot(html_path, png_path, scale, timeout)
+        if not png_path.is_file() or png_path.stat().st_size == 0:
+            raise RuntimeError(f"截图未写出有效 PNG：{png_path}")
+        return (_MAX_PAGE_WIDTH * scale, 0)
 
     async def shutdown(self) -> None:
         """关闭共享浏览器。"""

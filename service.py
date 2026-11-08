@@ -19,12 +19,15 @@ from src.app.plugin_system.api.log_api import get_logger
 from src.app.plugin_system.base import BaseService
 
 from .analyzer import analyze_day
+from .dossier_analyzer import analyze_dossier
 from .collector import (
     build_transcript,
+    collect_dossier_pool,
     compute_stats,
     day_bounds,
     fetch_day_messages,
     fetch_range_messages,
+    member_bot_stats,
     monday_of,
     resolve_timezone,
     sample_messages,
@@ -38,7 +41,7 @@ from .reports import ReportEntry, list_reports, slug_for_stream
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.4.3"
+_VERSION = "0.5.0"
 
 
 class NotebookService(BaseService):
@@ -513,6 +516,207 @@ class NotebookService(BaseService):
             hour = 23
         target = current.date() if hour >= 6 else current.date() - timedelta(days=1)
         return target.isoformat()
+
+    # ------------------------------------------------------------ 专题案底
+
+    def dossier_title(self) -> str:
+        """案底专题名。"""
+        return (self._config().dossier.title or "迫害记录簿").strip()
+
+    def focus_word(self) -> str:
+        """筛选焦点描述：留空自动「迫害{bot_name}」。"""
+        cfg = self._config()
+        focus = (cfg.dossier.focus_word or "").strip()
+        bot_name = (cfg.notebook.bot_name or "").strip() or "本bot"
+        return focus or f"迫害{bot_name}"
+
+    def case_number(self, monday: str) -> str:
+        """案卷编号：MOFOX-<年>-W<ISO 周序号>。"""
+        try:
+            iso = date_cls.fromisoformat(monday).isocalendar()
+            return f"MOFOX-{iso.year}-W{iso.week:02d}"
+        except ValueError:
+            return f"MOFOX-{monday}"
+
+    def dossier_paths(self, stream_id: str, monday: str) -> tuple[Path, Path, Path]:
+        """案底产物路径（PNG/JSON/HTML），kind=dossier。"""
+        return self.report_paths(stream_id, monday, kind="dossier")
+
+    async def generate_dossier(
+        self,
+        stream_id: str,
+        week_monday: str = "",
+        *,
+        room_name: str = "",
+        members: list[str] | None = None,
+        force: bool = False,
+    ) -> tuple[bool, str, Path | None]:
+        """生成指定周的案件卷宗（聚焦成员留空走自动 Top N）。
+
+        Args:
+            members: 聚焦成员的 QQ 号列表；为空时自动取与 bot 互动最多的 Top N。
+        """
+        config = self._config()
+        monday, _sunday, period_text = self.normalize_week(week_monday)
+        png_path, json_path, html_path = self.dossier_paths(stream_id, monday)
+        if png_path.exists() and not force:
+            return True, f"{monday} 当周的案底已存在", png_path
+
+        async with self._lock(f"dossier:{stream_id}:{monday}"):
+            if png_path.exists() and not force:
+                return True, f"{monday} 当周的案底已存在", png_path
+
+            messages = await fetch_range_messages(
+                stream_id, monday, 7, config.general.timezone,
+                include_bot=True, max_messages=0,
+            )
+            if not messages:
+                return False, f"{monday} 当周没有聊天记录，案底无从查起", None
+
+            human_messages, bot_messages = await split_bot_messages(messages)
+            bot_ids = {
+                str(message.get("sender_id") or "")
+                for message in bot_messages
+                if str(message.get("sender_id") or "")
+            }
+            if not bot_ids:
+                return False, "本周没有发现 bot 的发言记录，无法认定受害者", None
+
+            member_stats = member_bot_stats(
+                human_messages + bot_messages, bot_ids=bot_ids,
+                bot_name=config.notebook.bot_name,
+            )
+            focus_ids = [str(m).strip() for m in (members or []) if str(m).strip()]
+            if focus_ids:
+                known_ids = set(member_stats)
+                missing = [mid for mid in focus_ids if mid not in known_ids]
+                if missing:
+                    return False, (
+                        f"这些成员本周与{config.notebook.bot_name}没有互动记录："
+                        + "、".join(missing)
+                    ), None
+                focus_ids = [mid for mid in focus_ids if mid in known_ids]
+            else:
+                focus_ids = [
+                    sender for sender, _info in sorted(
+                        member_stats.items(), key=lambda item: item[1]["count"],
+                        reverse=True,
+                    )[: max(1, int(config.dossier.top_members))]
+                ]
+
+            culprit_stats = [
+                {"name": member_stats[mid]["name"], "count": member_stats[mid]["count"]}
+                for mid in focus_ids
+            ]
+            pool = collect_dossier_pool(
+                messages, bot_ids=bot_ids,
+                bot_name=config.notebook.bot_name,
+                focus_members=focus_ids,
+            )
+            if not pool:
+                return False, "候选池为空：这一周大家都很乖，没有可立案的记录", None
+
+            case_no = self.case_number(monday)
+            focus_word = self.focus_word()
+            dossier = await analyze_dossier(
+                report_date=monday,
+                room_name=self.room_name_for(stream_id, room_name),
+                bot_name=config.notebook.bot_name,
+                page_title=self.dossier_title(),
+                period_text=period_text,
+                case_no=case_no,
+                focus_word=focus_word,
+                pool_messages=pool,
+                culprit_stats=culprit_stats,
+                max_cases=max(1, int(config.dossier.max_cases)),
+                top_members=max(1, int(config.dossier.top_members)),
+                config=config,
+            )
+            try:
+                engine_used = await self._render_dossier(dossier, png_path, html_path)
+            except Exception as exc:
+                logger.error(f"渲染案底失败：{exc}", exc_info=True)
+                return False, f"案底渲染失败：{exc}", None
+            try:
+                await asyncio.to_thread(
+                    self._save_report, png_path, json_path, dossier.to_dict()
+                )
+            except Exception as exc:
+                logger.error(f"保存案底失败：{exc}", exc_info=True)
+                return False, f"案底保存失败：{exc}", None
+            self._cleanup_old_reports()
+            logger.info(
+                f"群聊案底已生成：{png_path}（引擎 {engine_used}，来源 {dossier.source}，"
+                f"案件 {len(dossier.cases)} 起）"
+            )
+            message = (
+                f"{monday} 当周的案底已生成（{len(dossier.cases)} 起案件，{engine_used} 引擎）"
+            )
+            if dossier.source.startswith("fallback") and dossier.llm_error:
+                message += f"；⚠️ 模型调用失败（{dossier.llm_error}），本次为规则版卷宗"
+            return True, message, png_path
+
+    async def send_dossier(
+        self,
+        stream_id: str,
+        week_monday: str = "",
+        *,
+        room_name: str = "",
+        members: list[str] | None = None,
+        regenerate: bool = False,
+    ) -> tuple[bool, str]:
+        """生成（或复用已有）案底并发送到聊天流。"""
+        config = self._config()
+        monday, _sunday, _text = self.normalize_week(week_monday)
+        png_path, _json, _html = self.dossier_paths(stream_id, monday)
+        if regenerate or not png_path.exists():
+            ok, message, path = await self.generate_dossier(
+                stream_id, monday, room_name=room_name,
+                members=members, force=regenerate,
+            )
+            if not ok or path is None:
+                return False, message
+            png_path = path
+
+        from src.app.plugin_system.api.send_api import send_image
+
+        payload = base64.b64encode(png_path.read_bytes()).decode("ascii")
+        timeout = max(5, int(config.general.send_timeout_seconds))
+        try:
+            sent = await asyncio.wait_for(
+                send_image(
+                    payload,
+                    stream_id=stream_id,
+                    platform=config.general.platform,
+                    processed_plain_text=f"{monday} 当周{self.dossier_title()}",
+                ),
+                timeout=timeout,
+            )
+        except TimeoutError:
+            return False, f"案底已生成，但发送超时（{timeout} 秒）"
+        except Exception as exc:
+            logger.error(f"发送案底失败：{exc}", exc_info=True)
+            return False, f"案底已生成，但发送失败：{exc}"
+        if not sent:
+            return False, "案底已生成，但发送接口返回失败"
+        return True, f"{monday} 当周的案底已发出"
+
+    async def _render_dossier(self, report: Any, png_path: Path, html_path: Path) -> str:
+        """按配置选择案底渲染引擎（与手账相同的 auto 回退逻辑）。"""
+        from .renderer import pick_engine
+
+        engine = pick_engine(self._config().notebook)
+        if engine == "playwright":
+            try:
+                await self.renderer().render_dossier(report, png_path, html_path)
+                return "playwright"
+            except Exception as exc:
+                if str(self._config().notebook.render_engine or "auto").strip().lower() == "playwright":
+                    raise
+                logger.warning(f"Playwright 案底渲染失败（{exc}），自动回退 Pillow 引擎")
+        pillow = self.pillow_renderer()
+        await asyncio.to_thread(pillow.render_dossier, report, png_path)
+        return "pillow"
 
     # ------------------------------------------------------------ 周报定时辅助
 

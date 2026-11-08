@@ -301,3 +301,134 @@ class NotebookWeeklyCommand(BaseCommand):
         except Exception as exc:
             logger.error(f"/摘录周报 重做失败：{exc}", exc_info=True)
             return False, f"周记重做失败：{exc}"
+
+
+class DossierCommand(BaseCommand):
+    """通过 ``/摘录案底 [周期] [成员,成员...]`` 生成专题案底卷宗。
+
+    成员参数写在一个词内用逗号分隔，可用 QQ 号或昵称（昵称需能唯一对齐）；
+    留空则自动聚焦本周与 bot 互动最多的成员。
+    """
+
+    name = "摘录案底"
+    description = "生成并发送指定周的专题案底卷宗（默认聚焦与 bot 互动最多的成员）"
+    permission_level = PermissionLevel.USER
+    associated_platforms: list[str] = ["qq"]
+    command_prefix = "/"
+
+    def __init__(
+        self,
+        plugin: Any,
+        stream_id: str,
+        message_id: str = "",
+        message: Any | None = None,
+    ) -> None:
+        """初始化命令，并按配置调整权限级别。"""
+        super().__init__(plugin, stream_id, message_id, message)
+        config = getattr(plugin, "config", None)
+        if isinstance(config, GroupNotebookConfig):
+            self.permission_level = _parse_permission(config.general.command_permission)
+
+    @classmethod
+    def match(cls, parts: list[str]) -> int:
+        """同时接受中文命令与英文别名。"""
+        if parts and parts[0].lower() in {"摘录案底", "案底", "dossier"}:
+            return 1
+        return 0
+
+    def _config(self) -> GroupNotebookConfig:
+        """读取插件配置。"""
+        config = getattr(self.plugin, "config", None)
+        return config if isinstance(config, GroupNotebookConfig) else GroupNotebookConfig()
+
+    def _service(self):
+        return getattr(self.plugin, "notebook", None)
+
+    def _parse_args(self, args: str) -> tuple[bool, str, list[str]]:
+        """解析 [周期] 与 [成员,成员...]，成员同时接受 QQ 号与昵称。"""
+        tokens = [token.strip() for token in str(args or "").split() if token.strip()]
+        period = ""
+        members: list[str] = []
+        for token in tokens:
+            if not period and (
+                token in {"本周", "上周", "这周"} or "-" in token
+            ):
+                period = token
+                continue
+            members.extend(part for part in token.split("，") if part.strip())
+        if not period:
+            period = "本周"
+        return True, period, members
+
+    @cmd_route()
+    async def handle_default(self, args: str = "") -> tuple[bool, str]:
+        """生成并发送案底。
+
+        Args:
+            args: 形如 ``本周 鹿目圆,123456``（周期与成员，均可省略）。
+
+        Returns:
+            ``(是否成功, 说明文本)``。
+        """
+        ok, period, members = self._parse_args(args)
+        if not ok:
+            return False, period
+        service = self._service()
+        if service is None:
+            return False, "摘录服务没准备好，稍后再试"
+        config = self._config()
+        logger.info(f"/摘录案底 触发：stream={self.stream_id} period={period} members={members}")
+        try:
+            return await service.send_dossier(
+                self.stream_id,
+                period,
+                room_name=config.notebook.room_name,
+                members=members or None,
+            )
+        except Exception as exc:
+            logger.error(f"/摘录案底 执行失败：{exc}", exc_info=True)
+            return False, f"案底生成失败：{exc}"
+
+    @cmd_route("预览")
+    async def handle_preview(self, args: str = "") -> tuple[bool, str]:
+        """只生成案底、不发送。"""
+        ok, period, members = self._parse_args(args)
+        if not ok:
+            return False, period
+        service = self._service()
+        if service is None:
+            return False, "摘录服务没准备好，稍后再试"
+        config = self._config()
+        try:
+            ok, message, _path = await service.generate_dossier(
+                self.stream_id,
+                period,
+                room_name=config.notebook.room_name,
+                members=members or None,
+            )
+        except Exception as exc:
+            logger.error(f"/摘录案底 预览失败：{exc}", exc_info=True)
+            return False, f"案底生成失败：{exc}"
+        return ok, message
+
+    @cmd_route("重做")
+    async def handle_regenerate(self, args: str = "") -> tuple[bool, str]:
+        """忽略旧图，重新生成并发送案底。"""
+        ok, period, members = self._parse_args(args)
+        if not ok:
+            return False, period
+        service = self._service()
+        if service is None:
+            return False, "摘录服务没准备好，稍后再试"
+        config = self._config()
+        try:
+            return await service.send_dossier(
+                self.stream_id,
+                period,
+                room_name=config.notebook.room_name,
+                members=members or None,
+                regenerate=True,
+            )
+        except Exception as exc:
+            logger.error(f"/摘录案底 重做失败：{exc}", exc_info=True)
+            return False, f"案底重做失败：{exc}"

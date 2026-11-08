@@ -165,6 +165,50 @@ def test_cover_update_without_upload(client, cover_tmp):
     assert response.status_code == 400
 
 
+def test_generate_week_body_parsed_as_model():
+    """回归：payload 模型曾定义在函数内，配合 __future__ annotations 被当成
+    query 参数，导致 422 "Field required"。周记端点必须接受 JSON body。"""
+    app = create_app(_plugin(notebook_service=None))
+    web_client = TestClient(app)
+    response = web_client.post(
+        "/api/generate_week",
+        json={"group_id": "123456", "date": "2026-11-05", "send": False},
+    )
+    # 服务未初始化时应是 503（说明已经走到端点内部），而不是 422 校验错误
+    assert response.status_code == 503
+    assert "摘录服务尚未初始化" in response.text
+
+
+def test_generate_week_rejects_bad_date(client, cover_tmp):
+    """带服务时，坏日期应在调用服务前被 400 拒绝。"""
+    response = client.post(
+        "/api/generate_week",
+        json={"group_id": "123456", "date": "not-a-day", "send": False},
+    )
+    assert response.status_code == 400
+
+
+def test_generate_week_rejects_future_date(client, cover_tmp):
+    response = client.post(
+        "/api/generate_week",
+        json={"group_id": "123456", "date": "2099-01-01", "send": False},
+    )
+    assert response.status_code == 400
+
+
+def test_generate_batch_body_parsed_as_model():
+    """批量端点同样必须接受 JSON body（同一回归）。"""
+    app = create_app(_plugin(notebook_service=None))
+    web_client = TestClient(app)
+    response = web_client.post(
+        "/api/generate_batch",
+        json={"group_id": "123456", "date_start": "2026-11-01",
+              "date_end": "2026-11-03"},
+    )
+    # 无服务 → 503（走到端点内部）；若是 422 则说明 body 又被当成 query 了
+    assert response.status_code == 503
+
+
 def test_state_exposes_dynamic_url_fields(client):
     """WebUI 地址必须由运行时解析，state 里提供完整地址与子路径字段。"""
     payload = client.get("/api/state").json()["data"]

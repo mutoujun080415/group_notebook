@@ -262,7 +262,8 @@ async function api(path, options = {}) {
   let payload = null;
   try { payload = await response.json(); } catch (error) { payload = null; }
   if (!response.ok) {
-    const detail = (payload && (payload.detail || payload.message)) || ('HTTP ' + response.status);
+    let detail = (payload && (payload.detail || payload.message)) || ('HTTP ' + response.status);
+    if (typeof detail !== 'string') detail = JSON.stringify(detail);
     throw new Error(detail);
   }
   if (payload && payload.code && payload.code !== 200) {

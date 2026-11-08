@@ -93,6 +93,28 @@ class GeneratePayload(BaseModel):
     regenerate: bool = Field(default=False, description="忽略已有图片重新生成")
 
 
+class BatchPayload(BaseModel):
+    """批量生成请求体。
+
+    注意：必须定义在模块层——本文件开了 ``from __future__ import annotations``，
+    函数局部类的字符串注解无法被 FastAPI 解析，会被当成 query 参数导致 422。
+    """
+
+    group_id: str = Field(default="", description="群号，留空用第一个配置群")
+    date_start: str = Field(default="", description="起始日期 YYYY-MM-DD")
+    date_end: str = Field(default="", description="结束日期 YYYY-MM-DD（含）")
+    regenerate: bool = Field(default=False, description="已有图也重新生成")
+
+
+class WeekPayload(BaseModel):
+    """周记生成请求体。"""
+
+    group_id: str = Field(default="", description="群号，留空用第一个配置群")
+    date: str = Field(default="", description="该周内任意日期 YYYY-MM-DD，留空为本周")
+    send: bool = Field(default=False, description="生成后是否发群")
+    regenerate: bool = Field(default=False, description="已有图也重新生成")
+
+
 def _ok(data: Any = None, message: str = "ok") -> dict[str, Any]:
     """统一响应形状。"""
     return {"code": 200, "message": message, "data": data}
@@ -268,18 +290,6 @@ def create_app(plugin: Any) -> FastAPI:
         """删除封面，海报回到配置的立绘/默认页眉。"""
         cover.clear()
         return _ok({"exists": False}, message="封面已删除")
-
-    class BatchPayload(BaseModel):
-        group_id: str = Field(default="", description="群号，留空用第一个配置群")
-        date_start: str = Field(default="", description="起始日期 YYYY-MM-DD")
-        date_end: str = Field(default="", description="结束日期 YYYY-MM-DD（含）")
-        regenerate: bool = Field(default=False, description="已有图也重新生成")
-
-    class WeekPayload(BaseModel):
-        group_id: str = Field(default="", description="群号，留空用第一个配置群")
-        date: str = Field(default="", description="该周内任意日期 YYYY-MM-DD，留空为本周")
-        send: bool = Field(default=False, description="生成后是否发群")
-        regenerate: bool = Field(default=False, description="已有图也重新生成")
 
     def _resolve_group(payload_group: str) -> tuple[dict[str, str], str]:
         rows = group_rows()

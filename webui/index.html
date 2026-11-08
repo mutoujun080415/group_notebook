@@ -169,6 +169,7 @@
       <button class="btn ghost" id="btn-preview" type="button">仅生成</button>
       <button class="btn ghost" id="btn-batch" type="button">批量补生成</button>
       <button class="btn ghost" id="btn-weekly" type="button">生成周报</button>
+      <button class="btn ghost" id="btn-weekly-send" type="button">周报并发送</button>
     </div>
     <div class="hint" id="conn-hint"></div>
   </section>
@@ -472,24 +473,27 @@ async function generateBatch() {
   }
 }
 
-async function generateWeekly() {
+async function generateWeekly(send) {
   if (state.busy) return;
   const groupId = $('sel-group').value;
   if (!groupId) { setHint('插件配置里没有群号，先填 general.groups', 'error'); return; }
   const day = $('inp-date').value;
   if (!day) { setHint('先选一个日期（生成它所在的那一周）', 'error'); return; }
+  if (send && !confirm('「周报并发送」会立刻把周记发到群里，确定吗？')) return;
 
   state.busy = true;
   $('btn-weekly').disabled = true;
+  $('btn-weekly-send').disabled = true;
   const started = Date.now();
   const tick = setInterval(() => {
-    setHint('正在生成周记（' + day + ' 所在周）… ' + Math.round((Date.now() - started) / 1000) + 's');
+    setHint('正在' + (send ? '生成并发送' : '生成') + '周记（' + day + ' 所在周）… '
+            + Math.round((Date.now() - started) / 1000) + 's');
   }, 1000);
   try {
     const data = (await api('api/generate_week', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ group_id: groupId, date: day, send: false }),
+      body: JSON.stringify({ group_id: groupId, date: day, send: send }),
     })) || {};
     setHint(data.message || '周记完成', data.ok ? 'ok' : 'error');
     toast(data.message || '周记完成', data.ok ? 'ok' : 'error');
@@ -502,11 +506,13 @@ async function generateWeekly() {
     clearInterval(tick);
     state.busy = false;
     $('btn-weekly').disabled = false;
+    $('btn-weekly-send').disabled = false;
   }
 }
 
 $('btn-batch').addEventListener('click', generateBatch);
-$('btn-weekly').addEventListener('click', generateWeekly);
+$('btn-weekly').addEventListener('click', () => generateWeekly(false));
+$('btn-weekly-send').addEventListener('click', () => generateWeekly(true));
 
 const now = new Date();
 const pad = (value) => String(value).padStart(2, '0');

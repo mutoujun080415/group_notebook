@@ -45,7 +45,7 @@ from .reports import build_stem, is_valid_day, ReportEntry, list_reports, slug_f
 
 logger = get_logger("group_notebook")
 
-_VERSION = "0.7.0"
+_VERSION = "0.8.0"
 
 
 class NotebookService(BaseService):
@@ -145,12 +145,7 @@ class NotebookService(BaseService):
             return False, f"日期格式不对：{target_day}（应为 YYYY-MM-DD）", None
 
         png_path, json_path, html_path = self.report_paths(stream_id, target_day)
-        if png_path.exists() and not force:
-            return True, f"{target_day} 的摘录已存在", png_path
-
         async with self._lock(f"{stream_id}:{target_day}"):
-            if png_path.exists() and not force:
-                return True, f"{target_day} 的摘录已存在", png_path
             return await self._build(stream_id, target_day, room_name, png_path, json_path, html_path)
 
     async def _build(
@@ -403,13 +398,7 @@ class NotebookService(BaseService):
         period_text = self.period_text(start, end, "周记")
         stem = build_stem("week", start, end)
         png_path, json_path, html_path = self.report_paths(stream_id, stem)
-        if png_path.exists() and not force:
-            return True, f"{period_text} 的周记已存在", png_path
-
         async with self._lock(f"week:{stream_id}:{stem}"):
-            if png_path.exists() and not force:
-                return True, f"{period_text} 的周记已存在", png_path
-
             days = (date_cls.fromisoformat(end) - date_cls.fromisoformat(start)).days + 1
             messages = await fetch_range_messages(
                 stream_id, start, days, config.general.timezone,
@@ -614,13 +603,7 @@ class NotebookService(BaseService):
         stem = build_stem("dossier", start, end, key=focus_key)
         period_text = self.period_text(start, end, "案卷")
         png_path, json_path, html_path = self.dossier_paths(stream_id, stem)
-        if png_path.exists() and not force:
-            return True, f"{period_text} 的案底已存在", png_path
-
         async with self._lock(f"dossier:{stream_id}:{stem}"):
-            if png_path.exists() and not force:
-                return True, f"{period_text} 的案底已存在", png_path
-
             days = (date_cls.fromisoformat(end) - date_cls.fromisoformat(start)).days + 1
             messages = await fetch_range_messages(
                 stream_id, start, days, config.general.timezone,

@@ -159,6 +159,34 @@ def report_file(data_dir: Path, slug: str, stem: str) -> Path | None:
     return resolved if resolved.is_file() else None
 
 
+def delete_report_files(data_dir: Path, slug: str, stem: str) -> bool:
+    """删除一份摘录的 PNG/JSON 及渲染中间 HTML。
+
+    Returns:
+        是否删除了 PNG（即记录真实存在过）。
+    """
+    safe_slug = slug_for_stream(slug)
+    if safe_slug != slug or parse_report_stem(stem) is None:
+        return False
+    folder = report_root(data_dir) / safe_slug
+    deleted = False
+    for suffix in (".png", ".json"):
+        target = folder / f"{stem}{suffix}"
+        if target.is_file():
+            try:
+                target.unlink()
+                deleted = True
+            except OSError:
+                pass
+    html = Path(data_dir) / "render" / safe_slug / f"{stem}.html"
+    if html.is_file():
+        try:
+            html.unlink()
+        except OSError:
+            pass
+    return deleted
+
+
 def list_reports(data_dir: Path, *, limit: int = 60) -> list[ReportEntry]:
     """列出已生成的摘录，按日期倒序。"""
     root = report_root(data_dir)

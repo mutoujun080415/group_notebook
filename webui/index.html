@@ -320,7 +320,13 @@
       <div class="history-list" id="history-list"></div>
     </aside>
     <main class="panel stage">
-      <div class="panel-head"><h2 id="stage-title">预览</h2><span class="muted" id="stage-meta"></span></div>
+      <div class="panel-head">
+        <h2 id="stage-title">预览</h2>
+        <span class="muted" id="stage-meta"></span>
+        <button class="btn ghost" id="btn-delete" type="button" hidden
+                style="border-color: var(--err); color: var(--err); padding: 4px 12px; font-size: 11.5px;"
+        >删除此记录</button>
+      </div>
       <div class="stage-body">
         <div class="empty" id="stage-empty">
           <strong>还没有预览</strong>
@@ -343,7 +349,8 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const state = { groups: [], reports: [], activeKey: null, busy: false, objectUrl: null,
-                filter: 'all', members: [], picked: [], direction: 'member_as_culprit' };
+                filter: 'all', members: [], picked: [], direction: 'member_as_culprit',
+                currentReport: null };
 
 const DIRECTION_META = {
   member_as_culprit: {
@@ -506,6 +513,8 @@ function revokeObjectUrl() {
 
 async function showReport(report) {
   state.activeKey = report.slug + ':' + report.kind + ':' + report.date;
+  state.currentReport = report;
+  $('btn-delete').hidden = false;
   renderHistory();
   const kindText = report.kind === 'week' ? '周记' : (report.kind === 'dossier' ? '案底' : '日报');
   $('stage-title').textContent = (report.period_text || report.date) + ' · ' + (report.group_name || '') + '（' + kindText + '）';
@@ -528,6 +537,7 @@ function showLatest() {
   if (!state.reports.length) {
     $('stage-title').textContent = '预览';
     $('stage-meta').textContent = '';
+    $('btn-delete').hidden = true;
     $('stage-empty').hidden = false;
     $('stage-empty').innerHTML = '<strong>还没有预览</strong><span>选个有消息的日子，点「仅生成」，第一次大概 10–60 秒。</span>';
     $('stage-image').hidden = true;
@@ -739,6 +749,25 @@ async function generateDossier(send) {
   }
 }
 
+async function deleteCurrent() {
+  if (!state.currentReport) return;
+  if (!confirm('确定删除这条摘录记录吗？（PNG/JSON 会被删掉，不可恢复）')) return;
+  try {
+    const data = (await api('api/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: state.currentReport.slug, stem: state.currentReport.stem }),
+    })) || {};
+    toast(data.message || '已删除', 'ok');
+    state.activeKey = null;
+    await loadState();
+    await loadReports(false);
+  } catch (error) {
+    toast('删除失败：' + error.message, 'error');
+  }
+}
+
+$('btn-delete').addEventListener('click', deleteCurrent);
 $('btn-refresh').addEventListener('click', () => refresh(false));
 $('btn-generate').addEventListener('click', () => generate(true));
 $('btn-preview').addEventListener('click', () => generate(false));

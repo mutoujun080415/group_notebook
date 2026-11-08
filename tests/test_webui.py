@@ -330,3 +330,23 @@ class TestDossierEndpointRegression:
         )
         assert response.status_code == 200
         assert "已发出" in response.json()["message"]
+
+
+def test_delete_record(client, cover_tmp, tmp_path, monkeypatch):
+    """删除端点：有文件时 200，再删 404。"""
+    monkeypatch.chdir(tmp_path)  # data/group_notebook 相对 cwd 解析
+    folder = tmp_path / "data" / "group_notebook" / "reports" / "abc"
+    folder.mkdir(parents=True)
+    (folder / "2026-11-05.png").write_bytes(b"png")
+    (folder / "2026-11-05.json").write_bytes(b"{}")
+    response = client.post("/api/delete", json={"slug": "abc", "stem": "2026-11-05"})
+    assert response.status_code == 200
+    assert response.json()["data"]["deleted"] is True
+    # 再删 404
+    response = client.post("/api/delete", json={"slug": "abc", "stem": "2026-11-05"})
+    assert response.status_code == 404
+
+
+def test_delete_rejects_bad_stem(client, cover_tmp):
+    response = client.post("/api/delete", json={"slug": "abc", "stem": "../evil"})
+    assert response.status_code == 404

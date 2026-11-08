@@ -31,7 +31,7 @@ from .collector import (
     split_bot_messages,
     today_in_timezone,
 )
-from .reports import build_stem
+from .reports import build_stem, delete_report_files
 from .config import GroupNotebookConfig
 from .reports import is_valid_day, report_file, report_url, slug_for_stream
 
@@ -116,6 +116,13 @@ class BatchPayload(BaseModel):
     date_start: str = Field(default="", description="起始日期 YYYY-MM-DD")
     date_end: str = Field(default="", description="结束日期 YYYY-MM-DD（含）")
     regenerate: bool = Field(default=False, description="已有图也重新生成")
+
+
+class DeletePayload(BaseModel):
+    """删除请求体。"""
+
+    slug: str = Field(default="", description="聊天流 slug")
+    stem: str = Field(default="", description="产物文件名 stem")
 
 
 class DossierPayload(BaseModel):
@@ -374,6 +381,21 @@ def create_app(plugin: Any) -> FastAPI:
             "week": monday,
             "members": members[:30],
         })
+
+    @app.post("/api/delete")
+    async def delete_record(payload: DeletePayload) -> dict[str, Any]:
+        """删除一条已生成的摘录记录（PNG/JSON/中间 HTML）。"""
+        svc = service()
+        if svc is None:
+            raise HTTPException(status_code=503, detail="摘录服务尚未初始化")
+        from .reports import delete_report_files
+
+        deleted = delete_report_files(svc.data_dir(), payload.slug, payload.stem)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="记录不存在或已删除")
+        logger.info(f"摘录记录已删除：{payload.slug}/{payload.stem}")
+        return _ok({"deleted": True, "slug": payload.slug, "stem": payload.stem},
+                   message="记录已删除")
 
     @app.post("/api/generate_dossier")
     async def generate_dossier_endpoint(payload: DossierPayload) -> dict[str, Any]:

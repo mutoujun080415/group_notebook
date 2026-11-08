@@ -376,7 +376,7 @@ def create_app(plugin: Any) -> FastAPI:
             raise HTTPException(status_code=400, detail="不能生成未来日期的案底")
         monday = monday_of(anchor)
 
-        stream_id = ChatStream.generate_stream_id(cfg.general.platform, group_id=group)
+        stream_id = ChatStream.generate_stream_id(cfg.general.platform, group_id=group_id)
         try:
             if payload.send:
                 ok, message = await svc.send_dossier(

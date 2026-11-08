@@ -290,3 +290,41 @@ class TestResolveHttpBaseUrl:
         from group_notebook.webui_standalone import resolve_http_base_url
 
         assert resolve_http_base_url() == "http://192.168.8.8:9555"
+
+
+class TestDossierEndpointRegression:
+    def test_generate_dossier_no_nameerror(self, client, cover_tmp):
+        """回归：端点里 group/group_id 变量名写错导致裸 500（v0.5.0 真机事故）。
+
+        带假服务时必须正常进入端点内部并返回 200，而不是 NameError 500。
+        """
+        class _Service(_FakeService):
+            async def generate_dossier(self, stream_id, week_monday="", *, room_name="",
+                                       members=None, force=False):
+                return True, "案底已生成", None
+
+        app = create_app(_plugin(notebook_service=_Service()))
+        web_client = TestClient(app)
+        response = web_client.post(
+            "/api/generate_dossier",
+            json={"group_id": "123456", "date": "2026-11-05", "members": [],
+                  "send": False},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["ok"] is True
+
+    def test_generate_dossier_send_path(self, client, cover_tmp):
+        class _Service(_FakeService):
+            async def send_dossier(self, stream_id, week_monday="", *, room_name="",
+                                   members=None, regenerate=False):
+                return True, "案底已发出"
+
+        app = create_app(_plugin(notebook_service=_Service()))
+        web_client = TestClient(app)
+        response = web_client.post(
+            "/api/generate_dossier",
+            json={"group_id": "123456", "date": "2026-11-05", "members": [],
+                  "send": True},
+        )
+        assert response.status_code == 200
+        assert "已发出" in response.json()["message"]

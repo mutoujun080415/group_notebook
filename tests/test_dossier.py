@@ -226,3 +226,4 @@ class TestDossierRender:
         assert "★★★★" in context["cases"][0]["stars"]
         html = renderer.render_dossier_html(report)
         assert "迫害记录簿" in html and "主犯通缉栏" in html and "案件卷宗" in html
+

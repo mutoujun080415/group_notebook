@@ -233,11 +233,12 @@ class NotebookWeeklyCommand(BaseCommand):
         return service
 
     @cmd_route()
-    async def handle_default(self, date_text: str = "") -> tuple[bool, str]:
-        """生成并发送指定周的周记。
+    async def handle_default(self, date_text: str = "", end_text: str = "") -> tuple[bool, str]:
+        """生成并发送指定区间的周记。
 
         Args:
-            date_text: 可选，支持 ``本周``、``上周``、``2026-11-08``、``11-08``。
+            date_text: 起始，支持 ``本周``、``上周``、``2026-11-08``、``11-08``。
+            end_text: 可选截止日期；与 date_text 组成自定义区间。
 
         Returns:
             ``(是否成功, 说明文本)``。
@@ -249,11 +250,12 @@ class NotebookWeeklyCommand(BaseCommand):
         if service is None:
             return False, "摘录服务没准备好，稍后再试"
         config = self._config()
-        logger.info(f"/摘录周报 触发：stream={self.stream_id} week={monday}")
+        logger.info(f"/摘录周报 触发：stream={self.stream_id} start={monday} end={end_text or '(自然周)'}")
         try:
             return await service.send_week(
                 self.stream_id,
                 monday,
+                end_day=end_text,
                 room_name=config.notebook.room_name,
             )
         except Exception as exc:
@@ -261,7 +263,7 @@ class NotebookWeeklyCommand(BaseCommand):
             return False, f"周记生成失败：{exc}"
 
     @cmd_route("预览")
-    async def handle_preview(self, date_text: str = "") -> tuple[bool, str]:
+    async def handle_preview(self, date_text: str = "", end_text: str = "") -> tuple[bool, str]:
         """只生成周记、不发送。"""
         ok, monday = self._resolve_monday(date_text)
         if not ok:
@@ -274,6 +276,7 @@ class NotebookWeeklyCommand(BaseCommand):
             ok, message, _path = await service.generate_week(
                 self.stream_id,
                 monday,
+                end_day=end_text,
                 room_name=config.notebook.room_name,
             )
         except Exception as exc:
@@ -282,7 +285,7 @@ class NotebookWeeklyCommand(BaseCommand):
         return ok, message
 
     @cmd_route("重做")
-    async def handle_regenerate(self, date_text: str = "") -> tuple[bool, str]:
+    async def handle_regenerate(self, date_text: str = "", end_text: str = "") -> tuple[bool, str]:
         """忽略旧图，重新生成并发送周记。"""
         ok, monday = self._resolve_monday(date_text)
         if not ok:
@@ -295,6 +298,7 @@ class NotebookWeeklyCommand(BaseCommand):
             return await service.send_week(
                 self.stream_id,
                 monday,
+                end_day=end_text,
                 room_name=config.notebook.room_name,
                 regenerate=True,
             )

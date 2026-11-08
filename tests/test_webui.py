@@ -25,7 +25,9 @@ class _FakeService:
         from src.app.plugin_system.types import ChatStream
 
         slug = slug_for_stream(ChatStream.generate_stream_id("qq", group_id="123456"))
-        return [ReportEntry(slug=slug, day="2026-11-05", size=1234, mtime=1793987400.0)][:limit]
+        return [ReportEntry(slug=slug, stem="2026-11-05", kind="day",
+                            day="2026-11-05", day_end="2026-11-05",
+                            size=1234, mtime=1793987400.0)][:limit]
 
     def data_dir(self):
         from pathlib import Path
@@ -71,7 +73,7 @@ def test_reports_mapped_names(client):
 
 
 def test_image_missing_returns_404(client):
-    response = client.get("/api/image", params={"slug": "abc", "date": "2026-11-05"})
+    response = client.get("/api/image", params={"slug": "abc", "stem": "2026-11-05"})
     assert response.status_code == 404
 
 
@@ -300,7 +302,7 @@ class TestDossierEndpointRegression:
         """
         class _Service(_FakeService):
             async def generate_dossier(self, stream_id, week_monday="", *, room_name="",
-                                       members=None, direction="", force=False):
+                                       members=None, direction="", end_day="", force=False):
                 return True, "案底已生成", None
 
         app = create_app(_plugin(notebook_service=_Service()))
@@ -316,7 +318,7 @@ class TestDossierEndpointRegression:
     def test_generate_dossier_send_path(self, client, cover_tmp):
         class _Service(_FakeService):
             async def send_dossier(self, stream_id, week_monday="", *, room_name="",
-                                   members=None, direction="", regenerate=False):
+                                   members=None, direction="", end_day="", regenerate=False):
                 return True, "案底已发出"
 
         app = create_app(_plugin(notebook_service=_Service()))

@@ -201,11 +201,11 @@
     </div>
   </header>
 
-  <!-- 区块① 日报 -->
+  <!-- 区块① 报告（日报+周记） -->
   <section class="panel">
     <div class="panel-head">
-      <h2><span class="panel-tag">日报</span>单日手账</h2>
-      <span class="muted">生成当天或补历史某一天，可批量补一段区间（只出图不发群）</span>
+      <h2><span class="panel-tag">报告</span>日报 · 周记</h2>
+      <span class="muted">日报=单日手账（可批量补区间）；周记=自选起止的一段一页（不固定七天）</span>
     </div>
     <div class="controls">
       <div class="field">
@@ -213,30 +213,25 @@
         <select id="sel-group"></select>
       </div>
       <div class="field">
-        <label for="inp-date">日期</label>
+        <label for="inp-date">开始日期</label>
         <input id="inp-date" type="date">
       </div>
       <div class="field">
-        <label for="inp-date-end">结束日期（批量，可选）</label>
+        <label for="inp-date-end">截止日期（可选）</label>
         <input id="inp-date-end" type="date">
       </div>
       <div class="field actions">
-        <button class="btn primary" id="btn-generate" type="button">生成并发送</button>
-        <button class="btn ghost" id="btn-preview" type="button">仅生成</button>
-        <button class="btn ghost" id="btn-batch" type="button">批量补生成</button>
+        <button class="btn primary" id="btn-generate" type="button">日报并发送</button>
+        <button class="btn ghost" id="btn-preview" type="button">仅生成日报</button>
+        <button class="btn ghost" id="btn-batch" type="button">批量补日报</button>
       </div>
       <div class="hint" id="hint-daily"></div>
     </div>
-  </section>
-
-  <!-- 区块② 周记 -->
-  <section class="panel">
-    <div class="panel-head">
-      <h2><span class="panel-tag violet">周记</span>一周一页</h2>
-      <span class="muted">生成上面「日期」所在自然周（周一为始，未结束则统计到当前），内容按周尺度提炼</span>
-    </div>
-    <div class="controls">
-      <div class="muted" style="padding: 4px 0;">群与日期沿用日报区的选择。</div>
+    <div class="controls" style="padding-top: 0;">
+      <div class="muted" style="padding: 4px 0;">
+        周记：用上面的「开始日期」（+可选「截止日期」组成自定义区间；截止留空则为该日开始的一周），
+        群沿用上面的选择。<b>周记的发送</b>走下面按钮。
+      </div>
       <div class="field actions">
         <button class="btn ghost" id="btn-weekly" type="button">生成周记</button>
         <button class="btn ghost" id="btn-weekly-send" type="button">周记并发送</button>
@@ -491,7 +486,7 @@ function renderHistory() {
     const badge = document.createElement('span');
     badge.className = 'kind-badge' + (report.kind === 'week' ? ' week' : (report.kind === 'dossier' ? ' dossier' : ''));
     badge.textContent = report.kind === 'week' ? '周记' : (report.kind === 'dossier' ? '案底' : '日报');
-    date.append(badge, document.createTextNode(report.date));
+    date.append(badge, document.createTextNode(report.period_text || report.date));
     const size = document.createElement('span');
     size.className = 'meta';
     size.textContent = fmtSize(report.size);
@@ -513,14 +508,13 @@ async function showReport(report) {
   state.activeKey = report.slug + ':' + report.kind + ':' + report.date;
   renderHistory();
   const kindText = report.kind === 'week' ? '周记' : (report.kind === 'dossier' ? '案底' : '日报');
-  $('stage-title').textContent = report.date + ' · ' + (report.group_name || '') + '（' + kindText + '）';
+  $('stage-title').textContent = (report.period_text || report.date) + ' · ' + (report.group_name || '') + '（' + kindText + '）';
   $('stage-meta').textContent = fmtSize(report.size) + ' · ' + (report.mtime_text || '');
   $('stage-empty').hidden = true;
   $('stage-image').hidden = true;
   revokeObjectUrl();
   try {
-    const kindParam = report.kind && report.kind !== 'day' ? '&kind=' + encodeURIComponent(report.kind) : '';
-    const blob = await api('api/image?slug=' + encodeURIComponent(report.slug) + '&date=' + encodeURIComponent(report.date) + kindParam);
+    const blob = await api('api/image?slug=' + encodeURIComponent(report.slug) + '&stem=' + encodeURIComponent(report.stem));
     state.objectUrl = URL.createObjectURL(blob);
     $('stage-image').src = state.objectUrl;
     $('stage-image').hidden = false;
@@ -670,7 +664,8 @@ async function generateWeekly(send) {
     const data = (await api('api/generate_week', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ group_id: groupId, date: day, send: send }),
+      body: JSON.stringify({ group_id: groupId, date: day,
+                             date_end: $('inp-date-end').value || '', send: send }),
     })) || {};
     setHint('hint-weekly', data.message || '周记完成', data.ok ? 'ok' : 'error');
     toast(data.message || '周记完成', data.ok ? 'ok' : 'error');

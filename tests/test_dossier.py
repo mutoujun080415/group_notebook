@@ -176,12 +176,12 @@ class TestAnalyzeDossier:
 
 class TestDossierRender:
     def test_parse_and_file(self, tmp_path: Path):
-        assert parse_report_stem("dossier-2026-11-02") == ("dossier", "2026-11-02")
+        assert parse_report_stem("dossier-2026-11-02") == ("dossier", "2026-11-02", "2026-11-02")
         folder = tmp_path / "reports" / "abc"
         folder.mkdir(parents=True)
         png = folder / "dossier-2026-11-02.png"
         png.write_bytes(b"x")
-        assert report_file(tmp_path, "abc", "2026-11-02", kind="dossier") == png.resolve()
+        assert report_file(tmp_path, "abc", "dossier-2026-11-02") == png.resolve()
 
     def test_pillow_render_smoke(self, tmp_path):
         pytest.importorskip("PIL")

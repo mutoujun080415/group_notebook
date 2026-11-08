@@ -217,9 +217,11 @@ class GroupNotebookPlugin(BasePlugin):
                 continue
             stream_id = ChatStream.generate_stream_id(config.general.platform, group_id=group_id)
             try:
+                sunday = (date_cls.fromisoformat(monday) + timedelta(days=6)).isoformat()
                 ok, message = await self.notebook.send_week(
                     stream_id,
                     monday,
+                    end_day=sunday,
                     room_name=names.get(group_id, ""),
                 )
             except Exception as exc:

@@ -38,10 +38,12 @@ class TestPeriodHelpers:
 
 class TestParseReportStem:
     def test_day(self):
-        assert parse_report_stem("2026-11-05") == ("day", "2026-11-05")
+        assert parse_report_stem("2026-11-05") == ("day", "2026-11-05", "2026-11-05")
 
     def test_week(self):
-        assert parse_report_stem("week-2026-11-02") == ("week", "2026-11-02")
+        assert parse_report_stem("week-2026-11-02") == ("week", "2026-11-02", "2026-11-02")
+        assert parse_report_stem("week-2026-11-02_2026-11-08") == (
+            "week", "2026-11-02", "2026-11-08")
 
     def test_invalid(self):
         assert parse_report_stem("week-not-a-day") is None
@@ -54,8 +56,8 @@ class TestWeeklyFiles:
         folder.mkdir(parents=True)
         png = folder / "week-2026-11-02.png"
         png.write_bytes(b"png")
-        assert report_file(tmp_path, "abc", "2026-11-02", kind="week") == png.resolve()
-        # day kind 找不到 week 文件
+        assert report_file(tmp_path, "abc", "week-2026-11-02") == png.resolve()
+        # day stem 找不到 week 文件
         assert report_file(tmp_path, "abc", "2026-11-02") is None
 
 

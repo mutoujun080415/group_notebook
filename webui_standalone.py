@@ -8,6 +8,9 @@
 
 from __future__ import annotations
 
+import hashlib
+from datetime import date as date_cls
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +31,7 @@ from .collector import (
     split_bot_messages,
     today_in_timezone,
 )
+from .reports import build_stem
 from .config import GroupNotebookConfig
 from .reports import is_valid_day, report_file, report_url, slug_for_stream
 
@@ -118,8 +122,9 @@ class DossierPayload(BaseModel):
     """案底生成请求体。"""
 
     group_id: str = Field(default="", description="群号，留空用第一个配置群")
-    date: str = Field(default="", description="该周内任意日期 YYYY-MM-DD，留空为本周")
-    direction: str = Field(default="", description="member_as_culprit（成员迫害bot）/ member_as_victim（成员被围攻），留空用配置默认")
+    date: str = Field(default="", description="起始日期 YYYY-MM-DD，留空为今天")
+    date_end: str = Field(default="", description="截止日期 YYYY-MM-DD；留空与起始同日")
+    direction: str = Field(default="", description="member_as_culprit（成员迫害其他成员）/ member_as_victim（成员被围攻），留空用配置默认")
     members: list[str] = Field(default_factory=list, description="聚焦成员 QQ 号列表，留空自动 Top N")
     send: bool = Field(default=False, description="生成后是否发群")
     regenerate: bool = Field(default=False, description="已有图也重新生成")
@@ -129,7 +134,8 @@ class WeekPayload(BaseModel):
     """周记生成请求体。"""
 
     group_id: str = Field(default="", description="群号，留空用第一个配置群")
-    date: str = Field(default="", description="该周内任意日期 YYYY-MM-DD，留空为本周")
+    date: str = Field(default="", description="起始日期 YYYY-MM-DD，留空为本周")
+    date_end: str = Field(default="", description="截止日期 YYYY-MM-DD；留空为自然周")
     send: bool = Field(default=False, description="生成后是否发群")
     regenerate: bool = Field(default=False, description="已有图也重新生成")
 
@@ -236,12 +242,12 @@ def create_app(plugin: Any) -> FastAPI:
         return _ok(data)
 
     @app.get("/api/image")
-    async def get_image(slug: str, date: str, kind: str = "day") -> FileResponse:
-        """返回摘录 PNG（kind=week 为周记）。"""
+    async def get_image(slug: str, stem: str) -> FileResponse:
+        """返回摘录 PNG（stem 为产物文件名，如 week-2026-11-02_2026-11-08）。"""
         svc = service()
         if svc is None:
             raise HTTPException(status_code=503, detail="摘录服务尚未初始化")
-        path = report_file(svc.data_dir(), slug, date, kind=kind)
+        path = report_file(svc.data_dir(), slug, stem)
         if path is None:
             raise HTTPException(status_code=404, detail="摘录不存在")
         return FileResponse(
@@ -386,33 +392,38 @@ def create_app(plugin: Any) -> FastAPI:
         if anchor > today:
             raise HTTPException(status_code=400, detail="不能生成未来日期的案底")
         monday = monday_of(anchor)
+        sunday = (date_cls.fromisoformat(monday) + timedelta(days=6)).isoformat()
 
         stream_id = ChatStream.generate_stream_id(cfg.general.platform, group_id=group_id)
         try:
             if payload.send:
                 ok, message = await svc.send_dossier(
-                    stream_id, monday, room_name=row["name"],
-                    members=payload.members or None,
-                    direction=payload.direction,
-                    regenerate=payload.regenerate,
+                    stream_id, monday, end_day=payload.date_end,
+                    room_name=row["name"], members=payload.members or None,
+                    direction=payload.direction, regenerate=payload.regenerate,
                 )
             else:
                 ok, message, _path = await svc.generate_dossier(
-                    stream_id, monday, room_name=row["name"],
-                    members=payload.members or None,
-                    direction=payload.direction,
-                    force=payload.regenerate,
+                    stream_id, monday, end_day=payload.date_end,
+                    room_name=row["name"], members=payload.members or None,
+                    direction=payload.direction, force=payload.regenerate,
                 )
         except Exception as exc:
             logger.error(f"独立页面生成案底失败：group={group_id} week={monday} {exc}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"案底生成失败：{exc}") from exc
+        dossier_stem = build_stem(
+            "dossier", monday, sunday,
+            key=hashlib.md5(
+                f"{payload.direction or 'default'}|{','.join(sorted(payload.members)) or 'auto'}".encode("utf-8")
+            ).hexdigest()[:8],
+        )
         return _ok(
             {
                 "ok": bool(ok),
                 "message": message,
                 "week": monday,
                 "group_id": group_id,
-                "url": report_url(row["slug"], monday, kind="dossier"),
+                "url": report_url(row["slug"], dossier_stem),
             },
             message=message,
         )
@@ -481,30 +492,32 @@ def create_app(plugin: Any) -> FastAPI:
         if anchor > today:
             raise HTTPException(status_code=400, detail="不能生成未来日期的周记")
         monday = monday_of(anchor)
+        sunday = (date_cls.fromisoformat(monday) + timedelta(days=6)).isoformat()
 
         stream_id = ChatStream.generate_stream_id(cfg.general.platform, group_id=group_id)
         try:
             if payload.send:
                 ok, message = await svc.send_week(
-                    stream_id, monday, room_name=row["name"],
-                    regenerate=payload.regenerate,
+                    stream_id, monday, end_day=payload.date_end,
+                    room_name=row["name"], regenerate=payload.regenerate,
                 )
             else:
                 ok, message, _path = await svc.generate_week(
-                    stream_id, monday, room_name=row["name"],
-                    force=payload.regenerate,
+                    stream_id, monday, end_day=payload.date_end,
+                    room_name=row["name"], force=payload.regenerate,
                 )
         except Exception as exc:
-            logger.error(f"独立页面生成周记失败：group={group_id} week={monday} {exc}", exc_info=True)
+            logger.error(f"独立页面生成周记失败：group={group_id} {start_hint} {exc}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"周记生成失败：{exc}") from exc
 
+        week_stem = build_stem("week", monday, sunday)
         return _ok(
             {
                 "ok": bool(ok),
                 "message": message,
                 "week": monday,
                 "group_id": group_id,
-                "url": report_url(row["slug"], monday, kind="week"),
+                "url": report_url(row["slug"], week_stem),
             },
             message=message,
         )
